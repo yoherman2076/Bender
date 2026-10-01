@@ -30,7 +30,11 @@ const emit = defineEmits(['restart', 'undo', 'new-game', 'hint'])
     <button type="button" class="btn-ghost btn-compact col-span-3 w-full" @click="emit('hint')">
       Usar pista (+30 s)
     </button>
-    <span class="caption col-span-3 text-center tabular-nums">
+    <span
+      class="caption col-span-3 text-center tabular-nums"
+      :class="moves > 0 ? 'anim-fade-up' : 'invisible'"
+      :aria-hidden="moves === 0"
+    >
       {{ moves }} movimiento{{ moves === 1 ? '' : 's' }} · {{ formatDuration(seconds) }}
     </span>
   </div>
