@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import GameIcon from '../GameIcon.vue'
 
 const props = defineProps({
@@ -17,6 +17,8 @@ const props = defineProps({
 const emit = defineEmits(['cell-click', 'cell-flag'])
 
 const interactive = computed(() => props.status === 'playing')
+const gridEl = ref(null)
+const focusedCell = ref({ r: 0, c: 0 })
 
 const NUMBER_CLASSES = {
   1: 'num-1',
@@ -43,6 +45,40 @@ function cellContent(r, c) {
   if (props.flagged[r][c]) return props.wrongFlags.has(`${r},${c}`) ? 'wrong-flag' : 'flag'
   if (showMine(r, c)) return 'mine'
   return 'hidden'
+}
+
+function cellLabel(r, c) {
+  const content = cellContent(r, c)
+  const state = {
+    hidden: 'sin explorar',
+    empty: 'vacía',
+    number: `número ${props.numbers[r][c]}`,
+    mine: 'mina',
+    flag: 'bandera puesta',
+    'wrong-flag': 'bandera incorrecta',
+  }[content]
+  const exploded = props.exploded?.r === r && props.exploded?.c === c
+  return `Fila ${r + 1}, columna ${c + 1}: ${state}${exploded ? ', mina que terminó la partida' : ''}`
+}
+
+function focusCell(r, c) {
+  focusedCell.value = { r, c }
+  nextTick(() => {
+    gridEl.value?.querySelector(`[data-r="${r}"][data-c="${c}"]`)?.focus()
+  })
+}
+
+function onCellKeydown(event, r, c) {
+  const destinations = {
+    ArrowUp: { r: Math.max(0, r - 1), c },
+    ArrowDown: { r: Math.min(props.size - 1, r + 1), c },
+    ArrowLeft: { r, c: Math.max(0, c - 1) },
+    ArrowRight: { r, c: Math.min(props.size - 1, c + 1) },
+  }
+  const destination = destinations[event.key]
+  if (!destination) return
+  event.preventDefault()
+  focusCell(destination.r, destination.c)
 }
 
 // Solo las fichas que acaban de cambiar. El retraso crece con la distancia
@@ -152,6 +188,7 @@ function pulseFlag(r, c) {
 }
 
 function onClick(r, c) {
+  focusedCell.value = { r, c }
   pressOrigin = { r, c }
   const wasFlagged = props.flagged[r][c]
   emit('cell-click', { r, c })
@@ -159,6 +196,7 @@ function onClick(r, c) {
 }
 
 function onFlag(r, c) {
+  focusedCell.value = { r, c }
   const wasFlagged = props.flagged[r][c]
   emit('cell-flag', { r, c })
   if (props.flagged[r][c] !== wasFlagged) pulseFlag(r, c)
@@ -167,48 +205,63 @@ function onFlag(r, c) {
 
 <template>
   <div
-    class="game-board-frame buscaminas-board-frame mx-auto grid gap-1"
-    :style="{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }"
+    ref="gridEl"
+    class="game-board-frame buscaminas-board-frame mx-auto flex flex-col gap-1"
     role="grid"
     aria-label="Tablero de Buscaminas"
+    aria-describedby="mines-board-instructions"
+    :aria-rowcount="size"
+    :aria-colcount="size"
   >
     <template v-for="r in size" :key="'row-' + r">
-      <button
-        v-for="c in size"
-        :key="'cell-' + r + '-' + c"
-        type="button"
-        role="gridcell"
-        :aria-label="`Fila ${r}, columna ${c}`"
-        :aria-disabled="!interactive"
-        :class="cellClass(r - 1, c - 1)"
-        :style="cellStyle(r - 1, c - 1)"
-        @click="onClick(r - 1, c - 1)"
-        @contextmenu.prevent="onFlag(r - 1, c - 1)"
+      <div
+        class="grid gap-1"
+        role="row"
+        :aria-rowindex="r"
+        :style="{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }"
       >
-        <GameIcon
-          v-if="cellContent(r - 1, c - 1) === 'mine'"
-          id="mine"
-          class="cell-icon anim-pop"
-        />
-        <span
-          v-else-if="cellContent(r - 1, c - 1) === 'number'"
-          class="cell-content anim-pop leading-none"
-          :class="NUMBER_CLASSES[numbers[r - 1][c - 1]]"
-          >{{ numbers[r - 1][c - 1] }}</span
+        <button
+          v-for="c in size"
+          :key="'cell-' + r + '-' + c"
+          :data-r="r - 1"
+          :data-c="c - 1"
+          type="button"
+          role="gridcell"
+          :aria-label="cellLabel(r - 1, c - 1)"
+          :aria-colindex="c"
+          :aria-disabled="!interactive"
+          :tabindex="focusedCell.r === r - 1 && focusedCell.c === c - 1 ? 0 : -1"
+          :class="cellClass(r - 1, c - 1)"
+          :style="cellStyle(r - 1, c - 1)"
+          @click="onClick(r - 1, c - 1)"
+          @keydown="onCellKeydown($event, r - 1, c - 1)"
+          @contextmenu.prevent="onFlag(r - 1, c - 1)"
         >
-        <GameIcon
-          v-else-if="cellContent(r - 1, c - 1) === 'flag'"
-          id="flag"
-          class="cell-icon anim-pop"
-        />
-        <span
-          v-else-if="cellContent(r - 1, c - 1) === 'wrong-flag'"
-          class="wrong-flag anim-pop"
-        >
-          <GameIcon id="flag" class="cell-icon" />
-          <GameIcon id="x" class="wrong-flag-x text-signal" />
-        </span>
-      </button>
+          <GameIcon
+            v-if="cellContent(r - 1, c - 1) === 'mine'"
+            id="mine"
+            class="cell-icon anim-pop"
+          />
+          <span
+            v-else-if="cellContent(r - 1, c - 1) === 'number'"
+            class="cell-content anim-pop leading-none"
+            :class="NUMBER_CLASSES[numbers[r - 1][c - 1]]"
+            >{{ numbers[r - 1][c - 1] }}</span
+          >
+          <GameIcon
+            v-else-if="cellContent(r - 1, c - 1) === 'flag'"
+            id="flag"
+            class="cell-icon anim-pop"
+          />
+          <span
+            v-else-if="cellContent(r - 1, c - 1) === 'wrong-flag'"
+            class="wrong-flag anim-pop"
+          >
+            <GameIcon id="flag" class="cell-icon" />
+            <GameIcon id="x" class="wrong-flag-x text-signal" />
+          </span>
+        </button>
+      </div>
     </template>
   </div>
 </template>

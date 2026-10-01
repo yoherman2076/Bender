@@ -1,30 +1,47 @@
 <script setup>
-import { onBeforeUnmount, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, shallowRef } from 'vue'
 import PatchesBoard from '../components/patches/PatchesBoard.vue'
 import PatchesToolbar from '../components/patches/PatchesToolbar.vue'
 import PatchesWinHero from '../components/patches/PatchesWinHero.vue'
+import GameConfirmDialog from '../components/GameConfirmDialog.vue'
 import GamePhase from '../components/GamePhase.vue'
 import GameIcon from '../components/GameIcon.vue'
 import BackLink from '../components/BackLink.vue'
 import { DIFFICULTIES, SHAPES, SIZE } from '../games/patches/constants.js'
 import { generatePuzzle } from '../games/patches/generator.js'
+import { findSolution } from '../games/patches/solver.js'
 import { checkWin, coversBoard, rectsOverlap } from '../games/patches/validators.js'
+import { GAME_SAVE_KEYS } from '../games/gameStorage.js'
+import { getTimeRecord, saveTimeRecord } from '../games/gameRecords.js'
+import { useElapsedTime } from '../composables/useElapsedTime.js'
+import { useGamePersistence } from '../composables/useGamePersistence.js'
 
-const SAVE_KEY = 'bender.patches.save.v1'
+const SAVE_KEY = GAME_SAVE_KEYS.patches
 
 const status = ref('setup') // setup | playing | won
 const setupDifficulty = ref('media')
 const difficulty = ref('media')
 const clues = ref([])
+const boardVersion = ref(0)
 const patches = ref([]) // [{ id, r1, c1, r2, c2 }]
 const history = ref([]) // [{ type: 'add' | 'delete', patch }]
 const moves = ref(0)
 const startTime = ref(0)
 const winSeconds = ref(0)
 const notice = ref(null)
+const bestRecord = ref(null)
+const confirmOpen = ref(false)
+const confirmTitle = ref('')
+const confirmLabel = ref('Descartar partida')
+const pendingAction = shallowRef(null)
 let noticeTimer = null
 let nextId = 1
 let saveEnabled = false
+
+const elapsedSeconds = useElapsedTime(
+  startTime,
+  computed(() => status.value === 'playing'),
+)
 
 function isValidRect(rect) {
   return (
@@ -130,6 +147,7 @@ function restoreGame() {
       return
     }
     difficulty.value = data.difficulty
+    bestRecord.value = getTimeRecord('patches', data.difficulty)
     clues.value = data.clues
     patches.value = data.patches
     history.value = data.history
@@ -145,14 +163,12 @@ function restoreGame() {
   }
 }
 
-watch(
+useGamePersistence(
   [status, difficulty, clues, patches, history, moves, startTime],
   updateSavedGame,
-  { deep: true },
 )
 
 restoreGame()
-onBeforeUnmount(updateSavedGame)
 
 function flashNotice(msg) {
   notice.value = msg
@@ -170,12 +186,14 @@ function newGame(difficultyId) {
   const puzzle = generatePuzzle(difficultyId)
   difficulty.value = puzzle.difficulty
   clues.value = puzzle.clues
+  boardVersion.value++
   patches.value = []
   history.value = []
   nextId = 1
   moves.value = 0
   winSeconds.value = 0
   notice.value = null
+  bestRecord.value = getTimeRecord('patches', puzzle.difficulty)
   startTime.value = Date.now()
   saveEnabled = true
   status.value = 'playing'
@@ -183,8 +201,8 @@ function newGame(difficultyId) {
 
 function restart() {
   // Reiniciar: vacía el tablero, mismo puzzle y dificultad.
-  saveEnabled = false
-  clearSavedGame()
+  saveEnabled = true
+  boardVersion.value++
   patches.value = []
   history.value = []
   nextId = 1
@@ -193,6 +211,58 @@ function restart() {
   notice.value = null
   startTime.value = Date.now()
   status.value = 'playing'
+}
+
+function requestDestructiveAction(title, label, action) {
+  if (history.value.length === 0) {
+    action()
+    return
+  }
+  confirmTitle.value = title
+  confirmLabel.value = label
+  pendingAction.value = action
+  confirmOpen.value = true
+}
+
+function cancelDestructiveAction() {
+  confirmOpen.value = false
+  pendingAction.value = null
+}
+
+function confirmDestructiveAction() {
+  const action = pendingAction.value
+  confirmOpen.value = false
+  pendingAction.value = null
+  action?.()
+}
+
+function finishIfWon() {
+  if (!checkWin(patches.value, clues.value, SIZE)) return false
+  winSeconds.value = Math.floor((Date.now() - startTime.value) / 1000)
+  bestRecord.value = saveTimeRecord('patches', difficulty.value, {
+    seconds: winSeconds.value,
+    moves: moves.value,
+  })
+  status.value = 'won'
+  return true
+}
+
+function useHint() {
+  if (status.value !== 'playing') return
+  const result = findSolution(patches.value, clues.value)
+  if (!result.solution) {
+    flashNotice(result.overLimit
+      ? 'No se pudo encontrar una pista ahora. Prueba a colocar otro parche.'
+      : 'No hay una solución compatible con tus parches. Deshaz o elimina alguno antes de pedir una pista.')
+    return
+  }
+  const candidate = result.solution.find(
+    (rect) => !patches.value.some((patch) => rectsOverlap(rect, patch)),
+  )
+  if (!candidate) return
+  startTime.value -= 30_000
+  onDraw(candidate)
+  flashNotice('Pista aplicada. Se añaden 30 segundos al tiempo.')
 }
 
 function onDraw(rect) {
@@ -206,10 +276,7 @@ function onDraw(rect) {
   patches.value = [...patches.value, patch]
   history.value.push({ type: 'add', patch })
   moves.value++
-  if (checkWin(patches.value, clues.value, SIZE)) {
-    winSeconds.value = Math.floor((Date.now() - startTime.value) / 1000)
-    status.value = 'won'
-  } else if (coversBoard(patches.value, SIZE)) {
+  if (!finishIfWon() && coversBoard(patches.value, SIZE)) {
     flashNotice('El tablero está cubierto, pero alguna pista todavía no se cumple. Revisa o elimina parches.')
   }
 }
@@ -242,6 +309,8 @@ onUnmounted(() => {
 
 <template>
   <main
+    id="main-content"
+    tabindex="-1"
     class="game-page"
     :class="{ 'game-page--active': status === 'playing' }"
   >
@@ -252,7 +321,7 @@ onUnmounted(() => {
         <div class="game-header patches">
           <span class="monogram monogram--patches" aria-hidden="true"><GameIcon id="patches" /></span>
           <div>
-            <h1>Patches</h1>
+            <h1 tabindex="-1">Patches</h1>
             <p>Divide el tablero en parches.</p>
           </div>
         </div>
@@ -288,20 +357,24 @@ onUnmounted(() => {
           :difficulty="difficulty"
           :can-undo="history.length > 0"
           :moves="moves"
+          :seconds="elapsedSeconds"
           @undo="undo"
-          @restart="restart"
-          @new-game="newGame"
+          @restart="requestDestructiveAction('¿Reiniciar este puzzle?', 'Reiniciar', restart)"
+          @new-game="requestDestructiveAction('¿Empezar otra partida?', 'Empezar otra', () => newGame(difficulty))"
+          @hint="useHint"
         />
         <PatchesBoard
+          :key="boardVersion"
           :clues="clues"
           :patches="patches"
           @draw="onDraw"
           @delete-patch="onDeletePatch"
         />
+        <p class="sr-only" role="status" aria-live="polite">{{ notice }}</p>
         <div
           v-if="notice"
           class="board-alert mx-auto mt-4 w-full max-w-[440px] rounded-small border border-signal/30 bg-signal/10 px-4 py-2.5 text-center text-sm font-medium text-signal"
-          role="alert"
+          aria-hidden="true"
         >
           {{ notice }}
         </div>
@@ -312,11 +385,20 @@ onUnmounted(() => {
           :difficulty="difficulty"
           :moves="moves"
           :seconds="winSeconds"
-          @play-again="newGame"
+          :best-record="bestRecord"
+          @play-again="newGame(difficulty)"
         />
       </GamePhase>
     </Transition>
   </main>
+  <GameConfirmDialog
+    :open="confirmOpen"
+    :title="confirmTitle"
+    description="Se perderá el progreso de esta partida."
+    :confirm-label="confirmLabel"
+    @confirm="confirmDestructiveAction"
+    @cancel="cancelDestructiveAction"
+  />
 </template>
 
 <style scoped>

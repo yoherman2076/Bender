@@ -1,13 +1,15 @@
 <script setup>
 import { difficultyLabel } from '../../games/patches/constants.js'
+import { formatDuration } from '../../composables/useElapsedTime.js'
 
 defineProps({
   difficulty: { type: String, required: true },
   canUndo: { type: Boolean, default: false },
   moves: { type: Number, default: 0 },
+  seconds: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['undo', 'restart', 'new-game'])
+const emit = defineEmits(['undo', 'restart', 'new-game', 'hint'])
 </script>
 
 <template>
@@ -30,8 +32,11 @@ const emit = defineEmits(['undo', 'restart', 'new-game'])
       <span class="sm:hidden">Nueva</span>
       <span class="hidden sm:inline">Otra partida</span>
     </button>
-    <span v-if="moves > 0" class="anim-fade-up caption col-span-3 text-center">
-      {{ moves }} movimiento{{ moves === 1 ? '' : 's' }}
+    <button type="button" class="btn-ghost btn-compact col-span-3 w-full" @click="emit('hint')">
+      Usar pista (+30 s)
+    </button>
+    <span class="caption col-span-3 text-center tabular-nums">
+      {{ moves }} movimiento{{ moves === 1 ? '' : 's' }} · {{ formatDuration(seconds) }}
     </span>
   </div>
 </template>

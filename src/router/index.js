@@ -1,42 +1,33 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '../views/HomeView.vue'
-
-// Vistas placeholder de cada juego.
-// Cuando implementemos cada juego, editaremos su fichero en src/views/.
-import TangoView from '../views/TangoView.vue'
-import BuscaminasView from '../views/BuscaminasView.vue'
-import PatchesView from '../views/PatchesView.vue'
-import Juego2048View from '../views/Juego2048View.vue'
-
 const routes = [
   {
     path: '/',
     name: 'home',
-    component: HomeView,
+    component: () => import('../views/HomeView.vue'),
     meta: { title: 'Inicio' },
   },
   {
     path: '/juegos/tango',
     name: 'tango',
-    component: TangoView,
+    component: () => import('../views/TangoView.vue'),
     meta: { title: 'Tango' },
   },
   {
     path: '/juegos/buscaminas',
     name: 'buscaminas',
-    component: BuscaminasView,
+    component: () => import('../views/BuscaminasView.vue'),
     meta: { title: 'Busca minas' },
   },
   {
     path: '/juegos/patches',
     name: 'patches',
-    component: PatchesView,
+    component: () => import('../views/PatchesView.vue'),
     meta: { title: 'Patches' },
   },
   {
     path: '/juegos/2048',
     name: 'juego-2048',
-    component: Juego2048View,
+    component: () => import('../views/Juego2048View.vue'),
     meta: { title: '2048' },
   },
   // Cualquier ruta desconocida vuelve al inicio

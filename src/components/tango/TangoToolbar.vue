@@ -1,10 +1,13 @@
 <script setup>
+import { formatDuration } from '../../composables/useElapsedTime.js'
+
 defineProps({
   canUndo: { type: Boolean, default: false },
   moves: { type: Number, default: 0 },
+  seconds: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['restart', 'undo', 'new-game'])
+const emit = defineEmits(['restart', 'undo', 'new-game', 'hint'])
 </script>
 
 <template>
@@ -24,8 +27,11 @@ const emit = defineEmits(['restart', 'undo', 'new-game'])
       <span class="sm:hidden">Nueva</span>
       <span class="hidden sm:inline">Otra partida</span>
     </button>
-    <span v-if="moves > 0" class="anim-fade-up caption col-span-3 text-center">
-      {{ moves }} movimiento{{ moves === 1 ? '' : 's' }}
+    <button type="button" class="btn-ghost btn-compact col-span-3 w-full" @click="emit('hint')">
+      Usar pista (+30 s)
+    </button>
+    <span class="caption col-span-3 text-center tabular-nums">
+      {{ moves }} movimiento{{ moves === 1 ? '' : 's' }} · {{ formatDuration(seconds) }}
     </span>
   </div>
 </template>

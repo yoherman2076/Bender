@@ -8,6 +8,7 @@ import ThemeToggle from './ThemeToggle.vue'
 const STORAGE_KEY = 'bender-sidebar-expanded'
 
 const route = useRoute()
+const emit = defineEmits(['mobile-open-change'])
 const isDesktop = ref(false)
 const isExpanded = ref(true)
 const isMobileOpen = ref(false)
@@ -55,14 +56,32 @@ async function toggleSidebar() {
   }
 }
 
-function closeFromKeyboard() {
-  closeMobileSidebar()
+function onSidebarKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeMobileSidebar()
+    return
+  }
+  if (isDesktop.value || !isMobileOpen.value || event.key !== 'Tab') return
+
+  const focusable = [...event.currentTarget.querySelectorAll(
+    'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )]
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last?.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first?.focus()
+  }
 }
 
 watch(isExpanded, (expanded) => {
-  if (typeof localStorage !== 'undefined') {
+  try {
     localStorage.setItem(STORAGE_KEY, String(expanded))
-  }
+  } catch {}
 })
 
 watch(
@@ -74,12 +93,15 @@ watch(
 
 watch(isMobileOpen, (open) => {
   document.body.style.overflow = open ? 'hidden' : ''
+  emit('mobile-open-change', open)
 })
 
 onMounted(() => {
   desktopQuery = window.matchMedia('(min-width: 768px)')
   isDesktop.value = desktopQuery.matches
-  isExpanded.value = localStorage.getItem(STORAGE_KEY) !== 'false'
+  try {
+    isExpanded.value = localStorage.getItem(STORAGE_KEY) !== 'false'
+  } catch {}
   desktopQuery.addEventListener('change', syncViewport)
 })
 
@@ -143,7 +165,10 @@ onBeforeUnmount(() => {
       ]"
       :aria-hidden="!isDesktop && !isMobileOpen"
       :inert="!isDesktop && !isMobileOpen"
-      @keydown.esc="closeFromKeyboard"
+      :role="!isDesktop && isMobileOpen ? 'dialog' : undefined"
+      :aria-modal="!isDesktop && isMobileOpen ? 'true' : undefined"
+      aria-label="Menú principal"
+      @keydown="onSidebarKeydown"
     >
       <div class="flex h-full min-h-0 flex-col">
         <div

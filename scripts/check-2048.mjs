@@ -1,6 +1,6 @@
 // Regresión del motor y de la capa visual animada del 2048.
 // El bloque de navegador espera el dev server en BASE (por defecto :5173).
-import { chromium } from 'playwright-core'
+import { launchBrowser } from './browser.mjs'
 import {
   boardsEqual,
   cloneBoard,
@@ -154,13 +154,15 @@ ok('las fichas visuales quedan ordenadas por id', idsOrdered, randomFailure)
 ok('la secuencia aleatoria cubre fusiones', mergeCount > 0, String(mergeCount))
 
 console.log('\n3. Navegador: geometría y movimiento')
-const browser = await chromium.launch({
-  executablePath: `${process.env.HOME}/.local/bin/google-chrome-stable`,
-})
+const browser = await launchBrowser()
 const page = await browser.newPage({ viewport: { width: 390, height: 780 } })
 const errors = []
 page.on('pageerror', (error) => errors.push(String(error)))
-page.on('console', (message) => message.type() === 'error' && errors.push(message.text()))
+page.on('console', (message) => {
+  // El documento SVG usado para preparar partidas solicita el favicon por defecto.
+  if (message.location().url.endsWith('/favicon.ico')) return
+  if (message.type() === 'error') errors.push(message.text())
+})
 
 const seededBoard = [
   [2, 0, 0, 4],
@@ -171,7 +173,8 @@ const seededBoard = [
 
 async function seedGame(nextBoard, viewport = { width: 390, height: 780 }) {
   await page.setViewportSize(viewport)
-  await page.goto(`${BASE}/juegos/2048`, { waitUntil: 'networkidle' })
+  // El guardado de pagehide debe terminar antes de preparar otra partida.
+  await page.goto(`${BASE}/favicon.svg`, { waitUntil: 'networkidle' })
   await page.evaluate(
     (data) => localStorage.setItem('bender.2048.save.v1', JSON.stringify(data)),
     {
@@ -185,8 +188,9 @@ async function seedGame(nextBoard, viewport = { width: 390, height: 780 }) {
       savedAt: Date.now(),
     },
   )
-  await page.reload({ waitUntil: 'networkidle' })
+  await page.goto(`${BASE}/juegos/2048`, { waitUntil: 'networkidle' })
   await page.waitForTimeout(150)
+  await page.getByRole('grid', { name: 'Tablero 2048' }).focus()
 }
 
 async function alignment() {
@@ -232,6 +236,13 @@ ok(
   desktopAlignment.maxDelta <= 1 && desktopAlignment.count === desktopAlignment.expected,
   JSON.stringify(desktopAlignment),
 )
+
+await page.waitForTimeout(1100)
+await page.reload({ waitUntil: 'networkidle' })
+const restoredElapsedMs = await page.evaluate(() =>
+  JSON.parse(localStorage.getItem('bender.2048.save.v1')).elapsedMs,
+)
+ok('recargar conserva el tiempo sin hacer movimientos', restoredElapsedMs >= 1000, String(restoredElapsedMs))
 
 console.log('\n4. Navegador: desplazamiento, pop y estado final')
 const mergeBoard = [
@@ -305,9 +316,9 @@ await seedGame([
 await page.keyboard.press('ArrowLeft')
 await page.waitForTimeout(150)
 ok('la ficha 2048 permanece visible durante el pop', (await page.locator('.game-2048-tile[data-kind="merged"]').count()) === 1)
-ok('el hero espera a la animación', (await page.getByText('¡Llegaste a 2048!').count()) === 0)
+ok('el hero espera a la animación', (await page.getByRole('heading', { name: 'Llegaste a 2048' }).count()) === 0)
 await page.waitForTimeout(800)
-ok('el hero aparece después', (await page.getByText('¡Llegaste a 2048!').count()) === 1)
+ok('el hero aparece después', (await page.getByRole('heading', { name: 'Llegaste a 2048' }).count()) === 1)
 
 console.log('\n5. prefers-reduced-motion')
 await page.emulateMedia({ reducedMotion: 'reduce' })

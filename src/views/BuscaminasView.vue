@@ -1,9 +1,10 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef } from 'vue'
 import BuscaminasSetupMenu from '../components/buscaminas/BuscaminasSetupMenu.vue'
 import BuscaminasBoard from '../components/buscaminas/BuscaminasBoard.vue'
 import BuscaminasToolbar from '../components/buscaminas/BuscaminasToolbar.vue'
 import BuscaminasWinHero from '../components/buscaminas/BuscaminasWinHero.vue'
+import GameConfirmDialog from '../components/GameConfirmDialog.vue'
 import GamePhase from '../components/GamePhase.vue'
 import GameIcon from '../components/GameIcon.vue'
 import BackLink from '../components/BackLink.vue'
@@ -25,8 +26,12 @@ import {
   wrongFlags,
   countFlags,
 } from '../games/buscaminas/engine.js'
+import { GAME_SAVE_KEYS } from '../games/gameStorage.js'
+import { getTimeRecord, saveTimeRecord } from '../games/gameRecords.js'
+import { useElapsedTime } from '../composables/useElapsedTime.js'
+import { useGamePersistence } from '../composables/useGamePersistence.js'
 
-const SAVE_KEY = 'bender.buscaminas.save.v1'
+const SAVE_KEY = GAME_SAVE_KEYS.buscaminas
 
 const status = ref('setup') // setup | playing | lost | won
 const size = ref(8)
@@ -42,7 +47,18 @@ const tool = ref(TOOL_PALA)
 const moves = ref(0)
 const startTime = ref(0)
 const winSeconds = ref(0)
+const bestRecord = ref(null)
+const hintMessage = ref('')
+const confirmOpen = ref(false)
+const confirmTitle = ref('')
+const confirmLabel = ref('Descartar partida')
+const pendingAction = shallowRef(null)
 let saveEnabled = false
+
+const elapsedSeconds = useElapsedTime(
+  startTime,
+  computed(() => status.value === 'playing'),
+)
 
 function isGrid(grid, size, isValidValue) {
   return (
@@ -124,6 +140,7 @@ function restoreGame() {
     }
     size.value = data.size
     difficulty.value = data.difficulty
+    bestRecord.value = getTimeRecord('buscaminas', `${data.size}-${data.difficulty}`)
     mineTotal.value = minesFor(data.size, data.difficulty)
     mines.value = data.mines
     numbers.value = data.numbers
@@ -142,7 +159,7 @@ function restoreGame() {
   }
 }
 
-watch(
+useGamePersistence(
   [
     status,
     size,
@@ -157,11 +174,9 @@ watch(
     startTime,
   ],
   updateSavedGame,
-  { deep: true },
 )
 
 restoreGame()
-onBeforeUnmount(updateSavedGame)
 
 const flagsLeft = computed(() => mineTotal.value - countFlags(flagged.value))
 const lostWrongFlags = computed(() =>
@@ -181,6 +196,8 @@ function startGame({ size: newSize, difficulty: newDifficulty }) {
   tool.value = TOOL_PALA
   moves.value = 0
   winSeconds.value = 0
+  bestRecord.value = getTimeRecord('buscaminas', `${newSize}-${newDifficulty}`)
+  hintMessage.value = ''
   startTime.value = Date.now()
   saveEnabled = true
   status.value = 'playing'
@@ -190,14 +207,58 @@ function startGame({ size: newSize, difficulty: newDifficulty }) {
 function restart() {
   // Reiniciar = nueva organización con la misma configuración.
   startGame({ size: size.value, difficulty: difficulty.value })
-  saveEnabled = false
-  clearSavedGame()
 }
 
 function backToSetup() {
   saveEnabled = false
   clearSavedGame()
   status.value = 'setup'
+}
+
+function requestDestructiveAction(title, label, action) {
+  if (moves.value === 0) {
+    action()
+    return
+  }
+  confirmTitle.value = title
+  confirmLabel.value = label
+  pendingAction.value = action
+  confirmOpen.value = true
+}
+
+function cancelDestructiveAction() {
+  confirmOpen.value = false
+  pendingAction.value = null
+}
+
+function confirmDestructiveAction() {
+  const action = pendingAction.value
+  confirmOpen.value = false
+  pendingAction.value = null
+  action?.()
+}
+
+function useHint() {
+  if (status.value !== 'playing') return
+  const candidates = []
+  for (let r = 0; r < size.value; r++) {
+    for (let c = 0; c < size.value; c++) {
+      if (revealed.value[r][c] || flagged.value[r][c]) continue
+      if (minesPlaced.value && mines.value[r][c]) continue
+      candidates.push({ r, c })
+    }
+  }
+  if (candidates.length === 0) {
+    hintMessage.value = 'No quedan casillas seguras disponibles para una pista.'
+    return
+  }
+
+  const candidate = minesPlaced.value
+    ? candidates.sort((a, b) => numbers.value[a.r][a.c] - numbers.value[b.r][b.c])[0]
+    : candidates[Math.floor(candidates.length / 2)]
+  startTime.value -= 30_000
+  dig(candidate.r, candidate.c)
+  hintMessage.value = `Pista: se abrió una casilla segura. Se añaden 30 segundos.`
 }
 
 function ensureMines(r, c) {
@@ -253,6 +314,10 @@ function chord(r, c) {
 function checkWinAndFinish() {
   if (checkWin(revealed.value, mines.value)) {
     winSeconds.value = Math.floor((Date.now() - startTime.value) / 1000)
+    bestRecord.value = saveTimeRecord('buscaminas', `${size.value}-${difficulty.value}`, {
+      seconds: winSeconds.value,
+      moves: moves.value,
+    })
     status.value = 'won'
   }
 }
@@ -279,7 +344,7 @@ function onCellFlag({ r, c }) {
 </script>
 
 <template>
-  <main class="game-page" :class="{ 'game-page--active': status === 'playing' }">
+  <main id="main-content" tabindex="-1" class="game-page" :class="{ 'game-page--active': status === 'playing' }">
     <BackLink />
 
     <Transition name="phase" mode="out-in">
@@ -287,7 +352,7 @@ function onCellFlag({ r, c }) {
         <div class="game-header buscaminas">
           <span class="monogram monogram--buscaminas" aria-hidden="true"><GameIcon id="buscaminas" /></span>
           <div>
-            <h1>Busca minas</h1>
+            <h1 tabindex="-1">Busca minas</h1>
             <p>Despeja el tablero sin explotar.</p>
           </div>
         </div>
@@ -297,17 +362,21 @@ function onCellFlag({ r, c }) {
       <!-- Al perder no cambia de rama: el tablero se queda y lo que
            avisa es el aviso y la revelación de las minas. -->
       <GamePhase v-else-if="status === 'playing' || status === 'lost'">
-        <p class="mb-4 text-center text-sm text-stone">
+        <p id="mines-board-instructions" class="mb-4 text-center text-sm text-stone">
           {{ size }}×{{ size }} · {{ difficultyLabel(difficulty) }} · {{ mineTotal }} minas ·
-          con las banderas puestas, pulsa un número para abrir alrededor
+          con las banderas puestas, pulsa un número para abrir alrededor. Usa las flechas para moverte y Intro o espacio para activar una casilla.
         </p>
         <BuscaminasToolbar
           :tool="tool"
           :flags-left="flagsLeft"
           :moves="moves"
-          @restart="restart"
+          :seconds="elapsedSeconds"
+          :can-hint="status === 'playing'"
+          @restart="requestDestructiveAction('¿Empezar una partida nueva?', 'Empezar de nuevo', restart)"
+          @hint="useHint"
           @set-tool="tool = $event"
         />
+        <p class="sr-only" role="status" aria-live="polite">{{ hintMessage }}</p>
         <div
           v-if="status === 'lost'"
           class="board-alert mx-auto mb-4 w-full max-w-[560px] rounded-small border border-signal/30 bg-signal/10 px-4 py-3 text-center text-sm font-medium text-signal"
@@ -332,7 +401,7 @@ function onCellFlag({ r, c }) {
           <button
             type="button"
             class="quiet-link"
-            @click="backToSetup"
+            @click="requestDestructiveAction('¿Cambiar la configuración?', 'Cambiar configuración', backToSetup)"
           >
             Cambiar configuración (tamaño / dificultad)
           </button>
@@ -345,6 +414,7 @@ function onCellFlag({ r, c }) {
           :difficulty-label="difficultyLabel(difficulty)"
           :moves="moves"
           :seconds="winSeconds"
+          :best-record="bestRecord"
           @play-again="restart"
         />
         <p class="mt-5 text-center">
@@ -359,6 +429,14 @@ function onCellFlag({ r, c }) {
       </GamePhase>
     </Transition>
   </main>
+  <GameConfirmDialog
+    :open="confirmOpen"
+    :title="confirmTitle"
+    description="Se perderá el progreso de esta partida."
+    :confirm-label="confirmLabel"
+    @confirm="confirmDestructiveAction"
+    @cancel="cancelDestructiveAction"
+  />
 </template>
 
 <style scoped>

@@ -2,8 +2,7 @@
 // Estrategia: solución válida aleatoria (backtracking) → restricciones =/×
 // coherentes con ella → pistas (givens) según dificultad.
 // La unicidad es best-effort: se intenta con un solver limitado y, si no se
-// consigue demostrar, se acepta el puzzle igualmente (sigue siendo válido y
-// el aviso en rojo contra la solución conocida sigue siendo correcto).
+// consigue demostrar, se acepta el puzzle y se valida la victoria por reglas.
 
 import {
   EMPTY,
@@ -17,6 +16,7 @@ import {
   MAX_UNIQUENESS_ATTEMPTS_LARGE,
   SOLVER_NODE_LIMIT,
 } from './constants.js'
+import { findRuleViolations } from './validators.js'
 
 function shuffled(arr) {
   const a = arr.slice()
@@ -37,33 +37,42 @@ function cloneBoard(board) {
 
 /** ¿Se puede poner val en (r,c) sin romper igualdad ni triples? */
 function isValidPlacement(board, size, half, r, c, val) {
-  // Triples: basta mirar los 2 anteriores en fila y columna.
-  if (c >= 2 && board[r][c - 1] === val && board[r][c - 2] === val) return false
-  if (r >= 2 && board[r - 1][c] === val && board[r - 2][c] === val) return false
+  // Al resolver una partida, las pistas y jugadas pueden estar a ambos lados.
+  for (let offset = -2; offset <= 0; offset++) {
+    const startC = c + offset
+    if (
+      startC >= 0 && startC + 2 < size &&
+      [startC, startC + 1, startC + 2].every((cc) => (cc === c ? val : board[r][cc]) === val)
+    ) return false
+    const startR = r + offset
+    if (
+      startR >= 0 && startR + 2 < size &&
+      [startR, startR + 1, startR + 2].every((rr) => (rr === r ? val : board[rr][c]) === val)
+    ) return false
+  }
 
   let rowSuns = 0
   let rowMoons = 0
+  let rowRemaining = 0
   for (let cc = 0; cc < size; cc++) {
     const v = cc === c ? val : board[r][cc]
     if (v === SUN) rowSuns++
     else if (v === MOON) rowMoons++
+    else rowRemaining++
   }
   if (rowSuns > half || rowMoons > half) return false
-  // En filas solo importa lo que queda de la propia fila.
-  const rowRemaining = size - (c + 1)
   if (rowSuns + rowRemaining < half || rowMoons + rowRemaining < half) return false
 
   let colSuns = 0
   let colMoons = 0
+  let colRemaining = 0
   for (let rr = 0; rr < size; rr++) {
     const v = rr === r ? val : board[rr][c]
     if (v === SUN) colSuns++
     else if (v === MOON) colMoons++
-    // Nota: en generación row-major las filas > r aún están vacías en esta
-    // columna, así que cuentan como "restantes".
+    else colRemaining++
   }
   if (colSuns > half || colMoons > half) return false
-  const colRemaining = size - (r + 1)
   if (colSuns + colRemaining < half || colMoons + colRemaining < half) return false
 
   return true
@@ -137,11 +146,7 @@ export function generateConstraints(solution, size, count) {
   }))
 }
 
-/**
- * Cuenta soluciones (hasta `limit`) del tablero parcial con restricciones.
- * Devuelve { count, overLimit }.
- */
-export function countSolutions(initialBoard, constraints, limit = 2, nodeLimit = SOLVER_NODE_LIMIT) {
+function searchSolutions(initialBoard, constraints, limit, nodeLimit) {
   const size = initialBoard.length
   const half = size / 2
   const board = cloneBoard(initialBoard)
@@ -155,6 +160,11 @@ export function countSolutions(initialBoard, constraints, limit = 2, nodeLimit =
   let count = 0
   let nodes = 0
   let overLimit = false
+  let solution = null
+
+  if (findRuleViolations(board, constraints).hasViolation) {
+    return { count, overLimit, solution }
+  }
 
   const solve = (pos) => {
     if (count >= limit || overLimit) return
@@ -164,20 +174,49 @@ export function countSolutions(initialBoard, constraints, limit = 2, nodeLimit =
     }
     if (pos === empties.length) {
       count++
+      if (!solution) solution = cloneBoard(board)
       return
     }
+
+    let bestIndex = pos
+    let values = [SUN, MOON]
+    for (let i = pos; i < empties.length; i++) {
+      const [r, c] = empties[i]
+      const candidates = [SUN, MOON].filter((val) =>
+        isValidPlacement(board, size, half, r, c, val) &&
+        placementRespectsConstraints(board, r, c, val, adjMap),
+      )
+      if (candidates.length === 0) return
+      if (i === pos || candidates.length < values.length) {
+        bestIndex = i
+        values = candidates
+      }
+      if (values.length === 1) break
+    }
+
+    ;[empties[pos], empties[bestIndex]] = [empties[bestIndex], empties[pos]]
     const [r, c] = empties[pos]
-    for (const val of [SUN, MOON]) {
-      if (!isValidPlacement(board, size, half, r, c, val)) continue
-      if (!placementRespectsConstraints(board, r, c, val, adjMap)) continue
+    for (const val of values) {
       board[r][c] = val
       solve(pos + 1)
       board[r][c] = EMPTY
-      if (count >= limit || overLimit) return
+      if (count >= limit || overLimit) break
     }
+    ;[empties[pos], empties[bestIndex]] = [empties[bestIndex], empties[pos]]
   }
   solve(0)
+  return { count, overLimit, solution }
+}
+
+/** Cuenta soluciones sin confundir una búsqueda incompleta con unicidad. */
+export function countSolutions(initialBoard, constraints, limit = 2, nodeLimit = SOLVER_NODE_LIMIT) {
+  const { count, overLimit } = searchSolutions(initialBoard, constraints, limit, nodeLimit)
   return { count, overLimit }
+}
+
+export function findSolution(initialBoard, constraints, nodeLimit = SOLVER_NODE_LIMIT) {
+  const { solution, overLimit } = searchSolutions(initialBoard, constraints, 1, nodeLimit)
+  return { solution, overLimit }
 }
 
 function pickGivens(solution, size, givensCount, constraints) {

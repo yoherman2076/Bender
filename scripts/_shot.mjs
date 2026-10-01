@@ -1,5 +1,5 @@
-import { chromium } from 'playwright-core'
-const b = await chromium.launch({ executablePath: `${process.env.HOME}/.local/bin/google-chrome-stable` })
+import { launchBrowser } from './browser.mjs'
+const b = await launchBrowser()
 const p = await b.newPage({ viewport: { width: 1280, height: 860 } })
 await p.goto('http://localhost:5173/', { waitUntil: 'networkidle' })
 await p.waitForTimeout(700)

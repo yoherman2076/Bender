@@ -1,13 +1,16 @@
 <script setup>
 import { TOOL_PALA, TOOL_BANDERA } from '../../games/buscaminas/constants.js'
+import { formatDuration } from '../../composables/useElapsedTime.js'
 
 defineProps({
   tool: { type: String, default: TOOL_PALA },
   flagsLeft: { type: Number, default: 0 },
   moves: { type: Number, default: 0 },
+  seconds: { type: Number, default: 0 },
+  canHint: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['restart', 'set-tool'])
+const emit = defineEmits(['restart', 'set-tool', 'hint'])
 </script>
 
 <template>
@@ -16,15 +19,11 @@ const emit = defineEmits(['restart', 'set-tool'])
       Reiniciar
     </button>
 
-    <div
-      class="grid min-w-0 grid-cols-2 overflow-hidden rounded-button border-[1.5px] border-ink"
-      role="radiogroup"
-      aria-label="Herramienta"
-    >
+    <div class="grid min-w-0 grid-cols-2 overflow-hidden rounded-button border-[1.5px] border-ink">
       <button
         type="button"
-        role="radio"
-        :aria-checked="tool === TOOL_PALA"
+        :aria-pressed="tool === TOOL_PALA"
+        aria-label="Usar pala para abrir casillas"
         :class="[
           'min-h-[44px] min-w-0 px-2 text-[13px] font-medium transition',
           tool === TOOL_PALA ? 'bg-ink text-on-ink' : 'bg-surface text-ink hover:bg-porcelain',
@@ -35,8 +34,8 @@ const emit = defineEmits(['restart', 'set-tool'])
       </button>
       <button
         type="button"
-        role="radio"
-        :aria-checked="tool === TOOL_BANDERA"
+        :aria-pressed="tool === TOOL_BANDERA"
+        aria-label="Usar bandera para marcar minas"
         :class="[
           'min-h-[44px] min-w-0 border-l-[1.5px] border-ink px-2 text-[13px] font-medium transition',
           tool === TOOL_BANDERA ? 'bg-ink text-on-ink' : 'bg-surface text-ink hover:bg-porcelain',
@@ -47,11 +46,17 @@ const emit = defineEmits(['restart', 'set-tool'])
       </button>
     </div>
 
-    <span class="caption col-span-2 text-center">
-      {{ flagsLeft }} bandera{{ flagsLeft === 1 ? '' : 's' }}
-      <span v-if="moves > 0" class="anim-fade-up">
-        · {{ moves }} movimiento{{ moves === 1 ? '' : 's' }}</span
-      >
+    <button
+      type="button"
+      class="btn-ghost btn-compact col-span-2 w-full"
+      :disabled="!canHint"
+      @click="emit('hint')"
+    >
+      Usar pista (+30 s)
+    </button>
+    <span class="caption col-span-2 text-center tabular-nums">
+      {{ flagsLeft }} bandera{{ flagsLeft === 1 ? '' : 's' }} ·
+      {{ moves }} movimiento{{ moves === 1 ? '' : 's' }} · {{ formatDuration(seconds) }}
     </span>
   </div>
 </template>

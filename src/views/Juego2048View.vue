@@ -1,8 +1,9 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import Game2048Board from '../components/juego2048/Game2048Board.vue'
 import Game2048Toolbar from '../components/juego2048/Game2048Toolbar.vue'
 import Game2048Hero from '../components/juego2048/Game2048Hero.vue'
+import GameConfirmDialog from '../components/GameConfirmDialog.vue'
 import GamePhase from '../components/GamePhase.vue'
 import GameIcon from '../components/GameIcon.vue'
 import BackLink from '../components/BackLink.vue'
@@ -16,8 +17,12 @@ import {
   hasTarget,
 } from '../games/juego2048/engine.js'
 import { tilesAfterMove, tilesFromBoard } from '../games/juego2048/tiles.js'
+import { GAME_SAVE_KEYS } from '../games/gameStorage.js'
+import { getBestScore, saveBestScore } from '../games/gameRecords.js'
+import { useElapsedTime } from '../composables/useElapsedTime.js'
+import { useGamePersistence } from '../composables/useGamePersistence.js'
 
-const SAVE_KEY = 'bender.2048.save.v1'
+const SAVE_KEY = GAME_SAVE_KEYS['2048']
 const END_STATUS_DELAY = 700
 
 const status = ref('setup') // setup | playing | won | endless | lost
@@ -28,8 +33,20 @@ const score = ref(0)
 const moves = ref(0)
 const history = ref([]) // [{ board, score }]
 const hasUndone = ref(false)
+const startTime = ref(0)
+const finalSeconds = ref(0)
+const bestScore = ref(getBestScore('2048'))
+const moveAnnouncement = ref('')
+const confirmOpen = ref(false)
+const pendingAction = shallowRef(null)
+const boardRef = ref(null)
 let saveEnabled = false
 let statusTimer = null
+
+const elapsedSeconds = useElapsedTime(
+  startTime,
+  computed(() => isActiveStatus(status.value)),
+)
 
 function clearStatusTimer() {
   if (statusTimer !== null) {
@@ -74,6 +91,14 @@ function isValidBoard(value) {
   )
 }
 
+function isValidHistoryEntry(entry) {
+  return (
+    isValidBoard(entry?.board) &&
+    Number.isInteger(entry.score) &&
+    entry.score >= 0
+  )
+}
+
 function isValidSave(data) {
   return (
     data?.version === 1 &&
@@ -84,12 +109,9 @@ function isValidSave(data) {
     Number.isInteger(data.moves) &&
     data.moves >= 0 &&
     Array.isArray(data.history) &&
-    data.history.every(
-      (entry) =>
-        isValidBoard(entry.board) &&
-        Number.isInteger(entry.score) &&
-        entry.score >= 0,
-    ) &&
+    (data.history.length === 0 || isValidHistoryEntry(data.history.at(-1))) &&
+    (data.elapsedMs === undefined ||
+      (typeof data.elapsedMs === 'number' && data.elapsedMs >= 0)) &&
     (data.hasUndone === undefined || typeof data.hasUndone === 'boolean')
   )
 }
@@ -118,6 +140,7 @@ function saveGame() {
         moves: moves.value,
         history: history.value,
         hasUndone: hasUndone.value,
+        elapsedMs: Math.max(0, Date.now() - startTime.value),
         savedAt: Date.now(),
       }),
     )
@@ -146,8 +169,11 @@ function restoreGame() {
     tiles.value = tilesFromBoard(board.value)
     score.value = data.score
     moves.value = data.moves
-    history.value = data.history
+    history.value = data.history.slice(-1)
     hasUndone.value = data.hasUndone === true
+    startTime.value = Date.now() - (data.elapsedMs ?? 0)
+    finalSeconds.value = Math.floor((data.elapsedMs ?? 0) / 1000)
+    bestScore.value = getBestScore('2048')
     shownStatus.value = status.value
     saveEnabled = true
   } catch {
@@ -155,39 +181,29 @@ function restoreGame() {
   }
 }
 
-watch([status, board, score, moves, history, hasUndone], updateSavedGame, { deep: true })
+useGamePersistence([status, board, score, moves, history, hasUndone, startTime], updateSavedGame)
 
 restoreGame()
-
-const KEY_DIRS = {
-  ArrowUp: 'up',
-  ArrowDown: 'down',
-  ArrowLeft: 'left',
-  ArrowRight: 'right',
-  w: 'up',
-  W: 'up',
-  s: 'down',
-  S: 'down',
-  a: 'left',
-  A: 'left',
-  d: 'right',
-  D: 'right',
-}
 
 function applyMove(dir) {
   if (status.value !== 'playing' && status.value !== 'endless') return
   const res = move(board.value, dir)
   if (!res.changed) return
   saveEnabled = true
-  history.value.push({ board: cloneBoard(board.value), score: score.value })
+  history.value = [{ board: cloneBoard(board.value), score: score.value }]
   board.value = res.board
   score.value += res.gained
+  bestScore.value = saveBestScore('2048', score.value)
   moves.value++
   const spawned = spawnTile(board.value)
   tiles.value = tilesAfterMove(tiles.value, res.moves, board.value, spawned)
+  const direction = { up: 'arriba', down: 'abajo', left: 'a la izquierda', right: 'a la derecha' }
+  moveAnnouncement.value = `Movimiento ${direction[dir]}. ${score.value} puntos.`
   if (status.value === 'playing' && hasTarget(board.value, TARGET)) {
+    finalSeconds.value = Math.floor((Date.now() - startTime.value) / 1000)
     setStatus('won', true)
   } else if (!canMove(board.value)) {
+    finalSeconds.value = Math.floor((Date.now() - startTime.value) / 1000)
     setStatus('lost', true)
   }
 }
@@ -200,18 +216,41 @@ function resetGame() {
   moves.value = 0
   history.value = []
   hasUndone.value = false
+  startTime.value = Date.now()
+  finalSeconds.value = 0
+  moveAnnouncement.value = ''
+  saveEnabled = true
   setStatus('playing')
 }
 
 function startGame() {
-  saveEnabled = true
   resetGame()
 }
 
 function restart() {
-  saveEnabled = false
   clearSavedGame()
   resetGame()
+}
+
+function requestRestart() {
+  if (isActiveStatus(status.value) && moves.value > 0) {
+    pendingAction.value = restart
+    confirmOpen.value = true
+    return
+  }
+  restart()
+}
+
+function cancelRestart() {
+  confirmOpen.value = false
+  pendingAction.value = null
+}
+
+function confirmRestart() {
+  const action = pendingAction.value
+  confirmOpen.value = false
+  pendingAction.value = null
+  action?.()
 }
 
 function undo() {
@@ -236,26 +275,17 @@ function continueEndless() {
   setStatus('endless')
 }
 
-function onKeydown(e) {
-  const dir = KEY_DIRS[e.key]
-  if (!dir) return
-  if (e.key.startsWith('Arrow')) e.preventDefault()
-  applyMove(dir)
+function focusBoardOnEntry() {
+  if (isActiveStatus(shownStatus.value)) boardRef.value?.focus()
 }
 
-onMounted(() => {
-  window.addEventListener('keydown', onKeydown)
-})
-
-onBeforeUnmount(() => {
-  clearStatusTimer()
-  updateSavedGame()
-  window.removeEventListener('keydown', onKeydown)
-})
+onBeforeUnmount(clearStatusTimer)
 </script>
 
 <template>
   <main
+    id="main-content"
+    tabindex="-1"
     class="game-page"
     :class="{
       'game-page--active': shownStatus === 'playing' || shownStatus === 'endless',
@@ -263,12 +293,12 @@ onBeforeUnmount(() => {
   >
     <BackLink />
 
-    <Transition name="phase" mode="out-in">
+    <Transition name="phase" mode="out-in" @after-enter="focusBoardOnEntry">
       <GamePhase v-if="shownStatus === 'setup'" variant="setup">
         <div class="game-header juego2048">
           <span class="monogram monogram--2048" aria-hidden="true"><GameIcon id="2048" /></span>
           <div>
-            <h1>2048</h1>
+            <h1 tabindex="-1">2048</h1>
             <p>Desliza y combina hasta 2048.</p>
           </div>
         </div>
@@ -297,20 +327,23 @@ onBeforeUnmount(() => {
       </GamePhase>
 
       <GamePhase v-else-if="shownStatus === 'playing' || shownStatus === 'endless'">
-        <p class="mb-4 text-center text-sm text-stone">
+        <p id="game-2048-instructions" class="mb-4 text-center text-sm text-stone">
           Desliza y combina hasta {{ TARGET }}.
           <span v-if="shownStatus === 'endless'" class="font-bold text-ember">Modo infinito</span>
           <span v-else class="sm:hidden"> · desliza para mover</span>
-          <span v-if="shownStatus !== 'endless'" class="hidden sm:inline"> · flechas o WASD para mover</span>
+          <span v-if="shownStatus !== 'endless'" class="hidden sm:inline"> · enfoca el tablero y usa flechas o WASD</span>
         </p>
         <Game2048Toolbar
           :can-undo="history.length > 0 && !hasUndone"
           :score="score"
           :moves="moves"
-          @restart="restart"
+          :best-score="bestScore"
+          :seconds="elapsedSeconds"
+          @restart="requestRestart"
           @undo="undo"
         />
-        <Game2048Board :board="board" :tiles="tiles" @move="applyMove" />
+        <p class="sr-only" role="status" aria-live="polite">{{ moveAnnouncement }}</p>
+        <Game2048Board ref="boardRef" :board="board" :tiles="tiles" @move="applyMove" />
       </GamePhase>
 
       <GamePhase v-else-if="shownStatus === 'won'" variant="won">
@@ -318,6 +351,8 @@ onBeforeUnmount(() => {
           kind="win"
           :score="score"
           :moves="moves"
+          :seconds="finalSeconds"
+          :best-score="bestScore"
           @restart="restart"
           @continue="continueEndless"
         />
@@ -328,11 +363,21 @@ onBeforeUnmount(() => {
           kind="lost"
           :score="score"
           :moves="moves"
+          :seconds="finalSeconds"
+          :best-score="bestScore"
           @restart="restart"
         />
       </GamePhase>
     </Transition>
   </main>
+  <GameConfirmDialog
+    :open="confirmOpen"
+    title="¿Empezar una partida nueva?"
+    description="Se perderán el tablero y el progreso de esta partida."
+    confirm-label="Empezar de nuevo"
+    @confirm="confirmRestart"
+    @cancel="cancelRestart"
+  />
 </template>
 
 <style scoped>

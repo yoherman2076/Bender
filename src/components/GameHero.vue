@@ -6,6 +6,7 @@ defineProps({
     type: Object,
     required: true,
   },
+  savedSummary: { type: Object, default: null },
 })
 </script>
 
@@ -14,7 +15,14 @@ defineProps({
     <span class="game-mark" :data-game="game.id" aria-hidden="true">
       <GameIcon :id="game.id" />
     </span>
-    <h2 class="m-0 text-heading-sm text-ink">{{ game.title }}</h2>
+    <div>
+      <h2 class="m-0 text-heading-sm text-ink">{{ game.title }}</h2>
+      <p class="mt-2 mb-0 text-sm text-stone">{{ game.short }}</p>
+      <p v-if="savedSummary" class="mt-4 mb-0 text-sm font-semibold text-ember">
+        Continuar partida<span v-if="savedSummary.details"> · {{ savedSummary.details }}</span>
+      </p>
+      <p v-else class="mt-4 mb-0 text-sm font-semibold text-ink">Jugar</p>
+    </div>
   </RouterLink>
 </template>
 

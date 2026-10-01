@@ -1,13 +1,23 @@
 <script setup>
+import { onMounted, ref } from 'vue'
 import GameHero from '../components/GameHero.vue'
 import { games } from '../data/games.js'
+import { savedGameSummary } from '../games/gameStorage.js'
+
+const savedGames = ref({})
+
+onMounted(() => {
+  savedGames.value = Object.fromEntries(
+    games.map((game) => [game.id, savedGameSummary(game.id)]),
+  )
+})
 </script>
 
 <template>
-  <main class="mx-auto w-full max-w-[1200px] px-6 pt-10 pb-16">
+  <main id="main-content" class="mx-auto w-full max-w-[1200px] px-6 pt-10 pb-16" tabindex="-1">
     <section class="relative mb-16 flex items-end justify-between gap-10">
       <div class="max-w-xl">
-        <h1 class="hero-title m-0 text-ink">Elige tu juego</h1>
+        <h1 tabindex="-1" class="hero-title m-0 text-ink">Elige tu juego</h1>
         <p class="m-0 mt-4 max-w-md text-base text-stone">Pulsa una tarjeta para jugar.</p>
       </div>
       <div class="ghost-layer" aria-hidden="true">
@@ -20,6 +30,7 @@ import { games } from '../data/games.js'
         v-for="(game, index) in games"
         :key="game.id"
         :game="game"
+        :saved-summary="savedGames[game.id]"
         class="anim-fade-up"
         :style="{ animationDelay: `${index * 45}ms` }"
       />

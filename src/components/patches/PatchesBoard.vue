@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { SIZE, PATCH_PALETTE } from '../../games/patches/constants.js'
 import {
   cluesInRect,
@@ -20,6 +20,8 @@ const emit = defineEmits(['draw', 'delete-patch'])
 const gridEl = ref(null)
 const dragStart = ref(null)
 const dragEnd = ref(null)
+const focusedCell = ref({ r: 0, c: 0 })
+const keyboardMessage = ref('')
 
 const preview = computed(() => {
   if (!dragStart.value || !dragEnd.value) return null
@@ -150,9 +152,107 @@ function cellFromEvent(e) {
   return { r: Number(el.dataset.r), c: Number(el.dataset.c) }
 }
 
+function cellLabel(r, c) {
+  const clue = props.clues.find((item) => item.r === r && item.c === c)
+  const patchIndex = patchOfCell.value.get(`${r},${c}`)
+  const details = []
+  if (clue) {
+    const shape = {
+      square: 'cuadrado',
+      wide: 'más ancho que alto',
+      tall: 'más alto que ancho',
+      free: 'forma libre',
+    }[clue.shape]
+    details.push(`pista ${clue.number ?? 'sin número'}, ${shape}`)
+  }
+  if (patchIndex !== undefined) {
+    const patch = props.patches[patchIndex]
+    const valid =
+      cluesInRect(patch, props.clues).length > 0 &&
+      validatePlacement(
+        patch,
+        props.clues,
+        props.patches.filter((_, index) => index !== patchIndex),
+      ).ok
+    details.push(
+      `parche ${patchIndex + 1}, ${rectAreaOf(patch)} casillas, ${valid ? 'válido' : 'con errores'}`,
+    )
+  } else {
+    details.push('sin parche')
+  }
+  return `Fila ${r + 1}, columna ${c + 1}: ${details.join(', ')}`
+}
+
+function focusCell(r, c) {
+  focusedCell.value = { r, c }
+  nextTick(() => {
+    gridEl.value?.querySelector(`[data-r="${r}"][data-c="${c}"]`)?.focus()
+  })
+}
+
+function onCellKeydown(event, r, c) {
+  const destinations = {
+    ArrowUp: { r: Math.max(0, r - 1), c },
+    ArrowDown: { r: Math.min(SIZE - 1, r + 1), c },
+    ArrowLeft: { r, c: Math.max(0, c - 1) },
+    ArrowRight: { r, c: Math.min(SIZE - 1, c + 1) },
+  }
+  const destination = destinations[event.key]
+  if (destination) {
+    event.preventDefault()
+    if (dragStart.value) dragEnd.value = destination
+    focusCell(destination.r, destination.c)
+    return
+  }
+
+  if (event.key === 'Escape' && dragStart.value) {
+    event.preventDefault()
+    dragStart.value = null
+    dragEnd.value = null
+    keyboardMessage.value = 'Selección cancelada.'
+    return
+  }
+
+  if (event.key === 'Backspace' || event.key === 'Delete') {
+    const patchIndex = patchOfCell.value.get(`${r},${c}`)
+    if (patchIndex === undefined) return
+    event.preventDefault()
+    emit('delete-patch', props.patches[patchIndex].id)
+    keyboardMessage.value = `Parche ${patchIndex + 1} eliminado.`
+    return
+  }
+
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  if (!dragStart.value) {
+    dragStart.value = { r, c }
+    dragEnd.value = { r, c }
+    keyboardMessage.value = `Primera esquina: fila ${r + 1}, columna ${c + 1}. Elige la segunda esquina.`
+    return
+  }
+
+  const start = dragStart.value
+  dragStart.value = null
+  dragEnd.value = null
+  if (start.r === r && start.c === c) {
+    const patchIndex = patchOfCell.value.get(`${r},${c}`)
+    if (patchIndex !== undefined) {
+      emit('delete-patch', props.patches[patchIndex].id)
+      keyboardMessage.value = `Parche ${patchIndex + 1} eliminado.`
+    } else {
+      keyboardMessage.value = 'Elige una segunda esquina distinta para dibujar un parche.'
+    }
+    return
+  }
+
+  emit('draw', normalizeRect(start, { r, c }))
+  keyboardMessage.value = `Rectángulo seleccionado desde fila ${start.r + 1}, columna ${start.c + 1} hasta fila ${r + 1}, columna ${c + 1}.`
+}
+
 function onPointerDown(e, r, c) {
   if (props.disabled || dragStart.value) return
   e.preventDefault()
+  focusCell(r, c)
   try {
     gridEl.value?.setPointerCapture(e.pointerId)
   } catch {}
@@ -192,25 +292,42 @@ function onPointerCancel() {
 <template>
   <div class="game-board-frame patches-board-frame mx-auto">
     <div class="patches-sheet relative">
+      <p class="sr-only" role="status" aria-live="polite">{{ keyboardMessage }}</p>
+      <p id="patches-board-instructions" class="sr-only">
+        Usa las flechas para moverte. Intro o espacio marca una esquina y después la opuesta; Escape cancela. Supr elimina el parche de la casilla enfocada.
+      </p>
       <!-- Base: casillas vacías. El rectángulo de la pista tapa sus juntas. -->
       <div
         ref="gridEl"
-        class="patches-grid grid touch-none select-none"
-        :style="{ gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))` }"
+        class="patches-grid flex flex-col touch-none select-none"
         role="grid"
         aria-label="Tablero de Patches"
+        aria-describedby="patches-board-instructions"
+        :aria-rowcount="SIZE"
+        :aria-colcount="SIZE"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerCancel"
       >
-        <template v-for="r in SIZE" :key="'row-' + r">
-          <div
+        <div
+          v-for="r in SIZE"
+          :key="'row-' + r"
+          class="patches-row grid"
+          role="row"
+          :aria-rowindex="r"
+          :style="{ gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))` }"
+        >
+          <button
             v-for="c in SIZE"
             :key="'cell-' + r + '-' + c"
+            type="button"
             role="gridcell"
+            :aria-label="cellLabel(r - 1, c - 1)"
+            :aria-colindex="c"
             data-cell
             :data-r="r - 1"
             :data-c="c - 1"
+            :tabindex="focusedCell.r === r - 1 && focusedCell.c === c - 1 ? 0 : -1"
             :class="[
               'aspect-square rounded border transition-colors',
               patchOfCell.has(`${r - 1},${c - 1}`)
@@ -224,8 +341,9 @@ function onPointerCancel() {
                   : 'border-mist bg-porcelain hover:border-ink',
             ]"
             @pointerdown="onPointerDown($event, r - 1, c - 1)"
-          ></div>
-        </template>
+            @keydown="onCellKeydown($event, r - 1, c - 1)"
+          ></button>
+        </div>
       </div>
 
       <!-- Parches fusionados + preview, superpuestos (no interceptan gestos) -->
@@ -313,6 +431,10 @@ function onPointerCancel() {
 }
 
 .patches-grid {
+  gap: var(--cell-gap);
+}
+
+.patches-row {
   gap: var(--cell-gap);
 }
 

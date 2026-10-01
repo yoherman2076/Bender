@@ -121,8 +121,8 @@ export function findSolutionMismatches(board, solution, givens) {
   return bad
 }
 
-export function isWin(board, solution, givens, constraints = []) {
+export function isWin(board, solution, givens, constraints = [], requireSolution = true) {
   if (!isBoardFull(board)) return false
-  if (findSolutionMismatches(board, solution, givens).size > 0) return false
+  if (requireSolution && findSolutionMismatches(board, solution, givens).size > 0) return false
   return !findRuleViolations(board, constraints).hasViolation
 }
