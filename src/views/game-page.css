@@ -138,20 +138,3 @@
   font-size: 1.3rem;
   font-weight: 700;
 }
-
-.quiet-link {
-  border: none;
-  background: transparent;
-  color: var(--color-stone);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.083em;
-  text-transform: uppercase;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
-.quiet-link:hover {
-  color: var(--color-ink);
-  text-decoration: underline;
-}

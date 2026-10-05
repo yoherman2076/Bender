@@ -238,12 +238,6 @@ function newPuzzle() {
   startGame({ size: size.value, difficulty: difficulty.value })
 }
 
-function backToSetup() {
-  saveEnabled = false
-  clearSavedGame()
-  status.value = 'setup'
-}
-
 function requestDestructiveAction(title, label, action) {
   if (history.value.length === 0) {
     action()
@@ -373,15 +367,6 @@ function onCellClick({ r, c }) {
           :constraints="constraints"
           @cell-click="onCellClick"
         />
-        <p class="mt-5 text-center">
-          <button
-            type="button"
-            class="quiet-link"
-            @click="requestDestructiveAction('¿Cambiar la configuración?', 'Cambiar configuración', backToSetup)"
-          >
-            Cambiar configuración (tamaño / dificultad)
-          </button>
-        </p>
       </GamePhase>
 
       <GamePhase v-else variant="won">
@@ -393,15 +378,6 @@ function onCellClick({ r, c }) {
           :best-record="bestRecord"
           @play-again="newPuzzle"
         />
-        <p class="mt-5 text-center">
-          <button
-            type="button"
-            class="quiet-link"
-            @click="backToSetup"
-          >
-            Cambiar configuración (tamaño / dificultad)
-          </button>
-        </p>
       </GamePhase>
     </Transition>
   </main>

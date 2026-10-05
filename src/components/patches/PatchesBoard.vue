@@ -15,25 +15,44 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['draw', 'delete-patch'])
+const emit = defineEmits(['draw', 'extend', 'delete-patch'])
 
 const gridEl = ref(null)
 const dragStart = ref(null)
 const dragEnd = ref(null)
+const dragMoved = ref(false)
+const extendingId = ref(null)
 const focusedCell = ref({ r: 0, c: 0 })
 const keyboardMessage = ref('')
 
+function extendRect(patch, cell) {
+  return {
+    r1: Math.min(patch.r1, cell.r),
+    c1: Math.min(patch.c1, cell.c),
+    r2: Math.max(patch.r2, cell.r),
+    c2: Math.max(patch.c2, cell.c),
+  }
+}
+
+function sameRect(a, b) {
+  return a.r1 === b.r1 && a.c1 === b.c1 && a.r2 === b.r2 && a.c2 === b.c2
+}
+
+const extendingPatch = computed(() =>
+  props.patches.find((patch) => patch.id === extendingId.value) ?? null,
+)
+
 const preview = computed(() => {
   if (!dragStart.value || !dragEnd.value) return null
+  if (extendingPatch.value) return extendRect(extendingPatch.value, dragEnd.value)
   return normalizeRect(dragStart.value, dragEnd.value)
 })
 
 const previewState = computed(() => {
   if (!preview.value) return null
   if (cluesInRect(preview.value, props.clues).length === 0) return 'unrelated'
-  return validatePlacement(preview.value, props.clues, props.patches).ok
-    ? 'valid'
-    : 'invalid'
+  const others = props.patches.filter((patch) => patch.id !== extendingId.value)
+  return validatePlacement(preview.value, props.clues, others).ok ? 'valid' : 'invalid'
 })
 
 const previewKeys = computed(() => {
@@ -60,11 +79,6 @@ function rectAreaOf(rect) {
   return (rect.r2 - rect.r1 + 1) * (rect.c2 - rect.c1 + 1)
 }
 
-function shownMeasure(area, expected, state) {
-  if (state === 'invalid' && expected != null) return expected
-  return area
-}
-
 /** Parches como piezas fusionadas: estilo + área para la capa superpuesta. */
 const patchOverlays = computed(() =>
   props.patches.map((p, i) => {
@@ -83,24 +97,26 @@ const patchOverlays = computed(() =>
       style: overlayStyle(p),
       area,
       expected,
-      shown: shownMeasure(area, expected, state),
       state,
       palette: clue ? paletteOf(clue) : PATCH_PALETTE[i % PATCH_PALETTE.length],
     }
   }),
 )
 
-/** Contorno + cuenta del rectángulo que se está dibujando. */
+/** Contorno + cuenta del rectángulo que se está dibujando o extendiendo. */
 const previewOverlay = computed(() => {
   if (!preview.value) return null
-  if (props.patches.some((patch) => rectsOverlap(preview.value, patch))) return null
+  const hitsAnother = props.patches.some(
+    (patch) => patch.id !== extendingId.value && rectsOverlap(preview.value, patch),
+  )
+  if (hitsAnother && extendingId.value == null) return null
   const area = rectAreaOf(preview.value)
   const expected = expectedMeasure(preview.value, props.clues)
   const clue = cluesInRect(preview.value, props.clues)[0]
   return {
     style: overlayStyle(preview.value),
     area,
-    shown: shownMeasure(area, expected, previewState.value),
+    expected,
     state: previewState.value,
     palette: clue ? paletteOf(clue) : null,
   }
@@ -190,6 +206,22 @@ function focusCell(r, c) {
   })
 }
 
+function clearGesture() {
+  dragStart.value = null
+  dragEnd.value = null
+  dragMoved.value = false
+  extendingId.value = null
+}
+
+function beginGesture(r, c) {
+  const patchIndex = patchOfCell.value.get(`${r},${c}`)
+  dragStart.value = { r, c }
+  dragEnd.value = { r, c }
+  dragMoved.value = false
+  extendingId.value = patchIndex === undefined ? null : props.patches[patchIndex].id
+  return patchIndex
+}
+
 function onCellKeydown(event, r, c) {
   const destinations = {
     ArrowUp: { r: Math.max(0, r - 1), c },
@@ -200,15 +232,17 @@ function onCellKeydown(event, r, c) {
   const destination = destinations[event.key]
   if (destination) {
     event.preventDefault()
-    if (dragStart.value) dragEnd.value = destination
+    if (dragStart.value) {
+      dragEnd.value = destination
+      dragMoved.value = true
+    }
     focusCell(destination.r, destination.c)
     return
   }
 
   if (event.key === 'Escape' && dragStart.value) {
     event.preventDefault()
-    dragStart.value = null
-    dragEnd.value = null
+    clearGesture()
     keyboardMessage.value = 'Selección cancelada.'
     return
   }
@@ -225,15 +259,17 @@ function onCellKeydown(event, r, c) {
   if (event.key !== 'Enter' && event.key !== ' ') return
   event.preventDefault()
   if (!dragStart.value) {
-    dragStart.value = { r, c }
-    dragEnd.value = { r, c }
-    keyboardMessage.value = `Primera esquina: fila ${r + 1}, columna ${c + 1}. Elige la segunda esquina.`
+    const patchIndex = beginGesture(r, c)
+    keyboardMessage.value =
+      patchIndex === undefined
+        ? `Primera esquina: fila ${r + 1}, columna ${c + 1}. Elige la segunda esquina.`
+        : `Parche ${patchIndex + 1}. Muévete y confirma para extenderlo, o vuelve a pulsar para eliminarlo.`
     return
   }
 
   const start = dragStart.value
-  dragStart.value = null
-  dragEnd.value = null
+  const extendId = extendingId.value
+  clearGesture()
   if (start.r === r && start.c === c) {
     const patchIndex = patchOfCell.value.get(`${r},${c}`)
     if (patchIndex !== undefined) {
@@ -242,6 +278,19 @@ function onCellKeydown(event, r, c) {
     } else {
       keyboardMessage.value = 'Elige una segunda esquina distinta para dibujar un parche.'
     }
+    return
+  }
+
+  if (extendId != null) {
+    const patch = props.patches.find((item) => item.id === extendId)
+    if (!patch) return
+    const rect = extendRect(patch, { r, c })
+    if (sameRect(rect, patch)) {
+      keyboardMessage.value = 'El parche no cambia.'
+      return
+    }
+    emit('extend', { id: extendId, rect })
+    keyboardMessage.value = `Parche extendido hasta fila ${r + 1}, columna ${c + 1}.`
     return
   }
 
@@ -256,35 +305,43 @@ function onPointerDown(e, r, c) {
   try {
     gridEl.value?.setPointerCapture(e.pointerId)
   } catch {}
-  dragStart.value = { r, c }
-  dragEnd.value = { r, c }
+  beginGesture(r, c)
 }
 
 function onPointerMove(e) {
   if (!dragStart.value || props.disabled) return
   const cell = cellFromEvent(e)
-  if (cell) dragEnd.value = cell
+  if (!cell || (cell.r === dragEnd.value.r && cell.c === dragEnd.value.c)) return
+  dragEnd.value = cell
+  dragMoved.value = true
 }
 
 function onPointerUp() {
   if (!dragStart.value) return
   const start = dragStart.value
   const end = dragEnd.value ?? start
-  dragStart.value = null
-  dragEnd.value = null
+  const moved = dragMoved.value
+  const extendId = extendingId.value
+  clearGesture()
   if (props.disabled) return
-  const same = start.r === end.r && start.c === end.c
-  if (same) {
-    const idx = patchOfCell.value.get(`${start.r},${start.c}`)
-    if (idx !== undefined) emit('delete-patch', props.patches[idx].id)
+  if (extendId != null) {
+    const patch = props.patches.find((item) => item.id === extendId)
+    if (!patch) return
+    if (!moved) {
+      emit('delete-patch', extendId)
+      return
+    }
+    const rect = extendRect(patch, end)
+    if (!sameRect(rect, patch)) emit('extend', { id: extendId, rect })
     return
   }
+  const same = start.r === end.r && start.c === end.c
+  if (same) return
   emit('draw', normalizeRect(start, end))
 }
 
 function onPointerCancel() {
-  dragStart.value = null
-  dragEnd.value = null
+  clearGesture()
 }
 
 </script>
@@ -294,7 +351,7 @@ function onPointerCancel() {
     <div class="patches-sheet relative">
       <p class="sr-only" role="status" aria-live="polite">{{ keyboardMessage }}</p>
       <p id="patches-board-instructions" class="sr-only">
-        Usa las flechas para moverte. Intro o espacio marca una esquina y después la opuesta; Escape cancela. Supr elimina el parche de la casilla enfocada.
+        Usa las flechas para moverte. Intro o espacio marca una esquina y después la opuesta; Escape cancela. Supr elimina el parche de la casilla enfocada. Arrastrar desde un parche ya puesto lo extiende; un toque lo elimina.
       </p>
       <!-- Base: casillas vacías. El rectángulo de la pista tapa sus juntas. -->
       <div
@@ -350,6 +407,7 @@ function onPointerCancel() {
       <div class="pointer-events-none absolute inset-0" aria-hidden="true">
         <div
           v-for="o in patchOverlays"
+          v-show="o.id !== extendingId"
           :key="'patch-' + o.id"
           :style="o.style"
           :class="o.state === 'valid'
@@ -358,10 +416,17 @@ function onPointerCancel() {
               ? 'patch-rect patch-rect--unrelated anim-pop-sm absolute flex items-center justify-center'
               : 'patch-rect patch-rect--invalid anim-pop-sm absolute flex items-center justify-center'"
         >
-          <span
-            :class="['patch-area-number font-bold', o.state === 'valid' ? o.palette.text : o.state === 'unrelated' ? 'text-stone' : 'text-signal']"
-            >{{ o.shown }}</span
-          >
+          <span class="flex flex-col items-center justify-center">
+            <span
+              :class="['patch-area-number font-bold', o.state === 'valid' ? o.palette.text : o.state === 'unrelated' ? 'text-stone' : 'text-signal']"
+              >{{ o.area }}</span
+            >
+            <span
+              v-if="o.state === 'invalid' && o.expected != null && o.expected !== o.area"
+              class="patch-asks"
+              >pide {{ o.expected }}</span
+            >
+          </span>
           <span
             v-if="o.state === 'invalid'"
             class="patch-mark absolute flex items-center justify-center rounded-full bg-signal font-black text-white"
@@ -369,30 +434,6 @@ function onPointerCancel() {
           >
             ×
           </span
-          >
-        </div>
-        <div
-          v-if="previewOverlay"
-          :style="previewOverlay.style"
-          :class="[
-            'patch-rect absolute flex items-center justify-center',
-            previewOverlay.state === 'valid' && previewOverlay.palette
-              ? [previewOverlay.palette.bg, previewOverlay.palette.text, previewOverlay.palette.edge]
-              : previewOverlay.state === 'unrelated'
-                ? 'patch-rect--unrelated'
-                : 'patch-rect--invalid',
-          ]"
-        >
-          <span
-            :class="[
-              'patch-area-number font-bold',
-              previewOverlay.state === 'valid' && previewOverlay.palette
-                ? previewOverlay.palette.text
-                : previewOverlay.state === 'invalid'
-                  ? 'text-signal'
-                  : 'text-ink',
-            ]"
-            >{{ previewOverlay.shown }}</span
           >
         </div>
       </div>
@@ -420,6 +461,40 @@ function onPointerCancel() {
             >
           </div>
         </template>
+      </div>
+
+      <!-- Al pintar, el recuento queda por encima de la pista. -->
+      <div v-if="previewOverlay" class="pointer-events-none absolute inset-0" aria-hidden="true">
+        <div
+          :style="previewOverlay.style"
+          :class="[
+            'patch-rect absolute flex items-center justify-center',
+            previewOverlay.state === 'valid' && previewOverlay.palette
+              ? [previewOverlay.palette.bg, previewOverlay.palette.text, previewOverlay.palette.edge]
+              : previewOverlay.state === 'unrelated'
+                ? 'patch-rect--unrelated'
+                : 'patch-rect--invalid',
+          ]"
+        >
+          <span class="flex flex-col items-center justify-center">
+            <span
+              :class="[
+                'patch-area-number font-bold',
+                previewOverlay.state === 'valid' && previewOverlay.palette
+                  ? previewOverlay.palette.text
+                  : previewOverlay.state === 'invalid'
+                    ? 'text-signal'
+                    : 'text-ink',
+              ]"
+              >{{ previewOverlay.area }}</span
+            >
+            <span
+              v-if="previewOverlay.area >= 2 && previewOverlay.state === 'invalid' && previewOverlay.expected != null && previewOverlay.expected !== previewOverlay.area"
+              class="patch-asks"
+              >pide {{ previewOverlay.expected }}</span
+            >
+          </span>
+        </div>
       </div>
       </div>
   </div>
@@ -476,6 +551,14 @@ function onPointerCancel() {
 
 .patch-area-number {
   font-size: clamp(0.8rem, 5.5cqw, 1.75rem);
+  line-height: 1;
+}
+
+.patch-asks {
+  margin-top: 2px;
+  font-size: clamp(0.55rem, 2.8cqw, 0.75rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
   line-height: 1;
 }
 
