@@ -76,7 +76,6 @@ function cellLabel(value, r, c) {
     @touchend="onTouchEnd"
     @touchcancel="onTouchCancel"
   >
-    <div class="rounded-small bg-mist p-2">
     <div
       ref="gridRef"
       class="game-2048-tile-area relative"
@@ -146,11 +145,14 @@ function cellLabel(value, r, c) {
         </div>
       </div>
     </div>
-    </div>
   </div>
 </template>
 
 <style scoped>
+.game-2048-board-frame.game-board-frame {
+  background: var(--color-mist);
+}
+
 .game-2048-tile-area {
   --tile-gap: 0.5rem;
 }

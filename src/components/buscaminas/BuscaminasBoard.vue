@@ -268,24 +268,7 @@ function onFlag(r, c) {
 
 <style scoped>
 .buscaminas-board-frame.game-board-frame {
-  padding: 17px;
-  border-radius: 0;
   background: var(--color-cell-line);
-  box-shadow: none;
-  -webkit-mask-image:
-    linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent),
-    linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
-  -webkit-mask-composite: source-in;
-  mask-image:
-    linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent),
-    linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
-  mask-composite: intersect;
-}
-
-@media (orientation: landscape) and (max-height: 600px) and (max-width: 1024px) {
-  .buscaminas-board-frame.game-board-frame {
-    padding: 11px;
-  }
 }
 
 .buscaminas-cell {
