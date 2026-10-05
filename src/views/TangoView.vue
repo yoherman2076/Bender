@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, shallowRef } from 'vue'
+import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue'
 import TangoSetupMenu from '../components/tango/TangoSetupMenu.vue'
 import TangoBoard from '../components/tango/TangoBoard.vue'
 import TangoToolbar from '../components/tango/TangoToolbar.vue'
@@ -192,9 +192,57 @@ useGamePersistence(
 
 restoreGame()
 
-const errorKeys = computed(() => {
+const ERROR_MARK_DELAY_MS = 1500
+
+const liveErrorKeys = computed(() => {
   if (status.value === 'setup' || board.value.length === 0) return new Set()
   return findRuleViolations(board.value, constraints.value).cellKeys
+})
+
+const errorKeys = ref(new Set())
+const errorTimers = new Map()
+
+function clearErrorTimer(key) {
+  const timer = errorTimers.get(key)
+  if (timer == null) return
+  clearTimeout(timer)
+  errorTimers.delete(key)
+}
+
+watch(
+  liveErrorKeys,
+  (keys, previous) => {
+    const visible = new Set()
+    for (const key of errorKeys.value) {
+      if (keys.has(key)) visible.add(key)
+    }
+    for (const key of errorTimers.keys()) {
+      if (!keys.has(key)) clearErrorTimer(key)
+    }
+    const revealNow = previous === undefined
+    for (const key of keys) {
+      if (visible.has(key) || errorTimers.has(key)) continue
+      if (revealNow) {
+        visible.add(key)
+        continue
+      }
+      errorTimers.set(
+        key,
+        setTimeout(() => {
+          errorTimers.delete(key)
+          if (!liveErrorKeys.value.has(key)) return
+          errorKeys.value = new Set([...errorKeys.value, key])
+        }, ERROR_MARK_DELAY_MS),
+      )
+    }
+    errorKeys.value = visible
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => {
+  for (const timer of errorTimers.values()) clearTimeout(timer)
+  errorTimers.clear()
 })
 
 function clone(boardToCopy) {
