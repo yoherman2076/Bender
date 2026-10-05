@@ -24,7 +24,7 @@ const difficulty = ref('media')
 const clues = ref([])
 const boardVersion = ref(0)
 const patches = ref([]) // [{ id, r1, c1, r2, c2 }]
-const history = ref([]) // [{ type: 'add' | 'delete', patch }]
+const history = ref([]) // [{ type: 'add' | 'delete', patch }] | [{ type: 'extend', before, after }]
 const moves = ref(0)
 const startTime = ref(0)
 const winSeconds = ref(0)
@@ -79,7 +79,15 @@ function isValidClue(clue) {
 }
 
 function isValidHistoryEntry(entry) {
-  if (!entry || !['add', 'delete'].includes(entry.type)) return false
+  if (!entry) return false
+  if (entry.type === 'extend') {
+    return (
+      isValidPatch(entry.before) &&
+      isValidPatch(entry.after) &&
+      entry.before.id === entry.after.id
+    )
+  }
+  if (entry.type !== 'add' && entry.type !== 'delete') return false
   return isValidPatch(entry.patch)
 }
 
@@ -281,6 +289,33 @@ function onDraw(rect) {
   }
 }
 
+function onExtend({ id, rect }) {
+  if (status.value !== 'playing') return
+  const current = patches.value.find((patch) => patch.id === id)
+  if (!current) return
+  if (
+    current.r1 === rect.r1 &&
+    current.c1 === rect.c1 &&
+    current.r2 === rect.r2 &&
+    current.c2 === rect.c2
+  ) {
+    return
+  }
+  if (patches.value.some((patch) => patch.id !== id && rectsOverlap(rect, patch))) {
+    flashNotice('Los parches no pueden solaparse')
+    return
+  }
+  saveEnabled = true
+  const before = { ...current }
+  const after = { id, r1: rect.r1, c1: rect.c1, r2: rect.r2, c2: rect.c2 }
+  patches.value = patches.value.map((patch) => (patch.id === id ? after : patch))
+  history.value.push({ type: 'extend', before, after })
+  moves.value++
+  if (!finishIfWon() && coversBoard(patches.value, SIZE)) {
+    flashNotice('El tablero está cubierto, pero alguna pista todavía no se cumple. Revisa o elimina parches.')
+  }
+}
+
 function onDeletePatch(id) {
   if (status.value !== 'playing') return
   const patch = patches.value.find((p) => p.id === id)
@@ -296,6 +331,10 @@ function undo() {
   if (!last) return
   if (last.type === 'add') {
     patches.value = patches.value.filter((p) => p.id !== last.patch.id)
+  } else if (last.type === 'extend') {
+    patches.value = patches.value.map((patch) =>
+      patch.id === last.before.id ? last.before : patch,
+    )
   } else {
     patches.value = [...patches.value, last.patch]
   }
@@ -368,6 +407,7 @@ onUnmounted(() => {
           :clues="clues"
           :patches="patches"
           @draw="onDraw"
+          @extend="onExtend"
           @delete-patch="onDeletePatch"
         />
         <p class="sr-only" role="status" aria-live="polite">{{ notice }}</p>

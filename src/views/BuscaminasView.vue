@@ -209,12 +209,6 @@ function restart() {
   startGame({ size: size.value, difficulty: difficulty.value })
 }
 
-function backToSetup() {
-  saveEnabled = false
-  clearSavedGame()
-  status.value = 'setup'
-}
-
 function requestDestructiveAction(title, label, action) {
   if (moves.value === 0) {
     action()
@@ -397,15 +391,6 @@ function onCellFlag({ r, c }) {
           @cell-click="onCellClick"
           @cell-flag="onCellFlag"
         />
-        <p class="mt-5 text-center">
-          <button
-            type="button"
-            class="quiet-link"
-            @click="requestDestructiveAction('¿Cambiar la configuración?', 'Cambiar configuración', backToSetup)"
-          >
-            Cambiar configuración (tamaño / dificultad)
-          </button>
-        </p>
       </GamePhase>
 
       <GamePhase v-else variant="won">
@@ -417,15 +402,6 @@ function onCellFlag({ r, c }) {
           :best-record="bestRecord"
           @play-again="restart"
         />
-        <p class="mt-5 text-center">
-          <button
-            type="button"
-            class="quiet-link"
-            @click="backToSetup"
-          >
-            Cambiar configuración (tamaño / dificultad)
-          </button>
-        </p>
       </GamePhase>
     </Transition>
   </main>
