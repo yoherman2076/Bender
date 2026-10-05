@@ -8,6 +8,26 @@ defineProps({
 })
 
 const emit = defineEmits(['move'])
+const gridRef = ref(null)
+
+defineExpose({
+  focus: () => gridRef.value?.focus(),
+})
+
+const KEY_DIRECTIONS = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  w: 'up',
+  W: 'up',
+  s: 'down',
+  S: 'down',
+  a: 'left',
+  A: 'left',
+  d: 'right',
+  D: 'right',
+}
 
 const SWIPE_MIN = 24
 const touchStart = ref(null)
@@ -31,6 +51,13 @@ function onTouchEnd(e) {
   emit('move', Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up')
 }
 
+function onKeydown(event) {
+  const direction = KEY_DIRECTIONS[event.key]
+  if (!direction) return
+  event.preventDefault()
+  emit('move', direction)
+}
+
 function fontSizeFor(value) {
   if (value >= 1024) return 'clamp(0.8rem, 6cqw, 1.75rem)'
   if (value >= 128) return 'clamp(1rem, 8cqw, 2.25rem)'
@@ -44,33 +71,42 @@ function cellLabel(value, r, c) {
 
 <template>
   <div
-    class="game-board-frame game-2048-board-frame mx-auto rounded-lg border border-ink-500 bg-ink-900 p-2.5 touch-none"
+    class="game-board-frame game-2048-board-frame mx-auto touch-none"
     @touchstart="onTouchStart"
     @touchend="onTouchEnd"
     @touchcancel="onTouchCancel"
   >
+    <div class="rounded-small bg-mist p-2">
     <div
-      class="game-2048-tile-area relative grid gap-2"
-      :style="{
-        '--tile-count': SIZE,
-        gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))`,
-      }"
+      ref="gridRef"
+      class="game-2048-tile-area relative"
+      :style="{ '--tile-count': SIZE }"
       role="grid"
       aria-label="Tablero 2048"
+      aria-describedby="game-2048-instructions"
+      :aria-rowcount="SIZE"
+      :aria-colcount="SIZE"
+      tabindex="0"
+      @keydown="onKeydown"
+      @click="$event.currentTarget.focus()"
     >
-      <div
-        v-for="(row, r) in board"
-        :key="'row-' + r"
-        class="contents"
-      >
+      <div class="grid gap-2" role="rowgroup">
+        <div
+          v-for="(row, r) in board"
+          :key="'row-' + r"
+          class="grid gap-2"
+          role="row"
+          :aria-rowindex="r + 1"
+          :style="{ gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))` }"
+        >
         <div
           v-for="(value, c) in row"
           :key="'cell-' + r + '-' + c"
           role="gridcell"
           :aria-label="cellLabel(value, r, c)"
-          class="flex aspect-square items-center justify-center rounded-md bg-surface-sunken text-transparent"
-        >
-          ·
+          :aria-colindex="c + 1"
+          class="flex aspect-square items-center justify-center rounded-small bg-surface"
+        ></div>
         </div>
       </div>
 
@@ -109,6 +145,7 @@ function cellLabel(value, r, c) {
           </div>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>

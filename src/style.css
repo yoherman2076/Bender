@@ -1,54 +1,51 @@
 @import "tailwindcss";
 
-/* Para los pocos colores de página que no tienen token propio. */
-@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
-
 @theme {
-  --font-sans: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* Manrope: grotesca geométrica, el sustituto libre de Roobert. */
+  --font-sans: Manrope, ui-sans-serif, system-ui, sans-serif;
 
-  /* Superficies: ink-950 es el fondo de la página; ink-500, el borde. */
-  --color-ink-950: oklch(14.5% 0.022 285);
-  --color-ink-900: oklch(19.2% 0.03 285);
-  --color-ink-800: oklch(23.6% 0.038 285);
-  --color-ink-700: oklch(26.8% 0.043 285);
-  --color-ink-600: oklch(29.8% 0.048 285);
-  --color-ink-500: oklch(35.2% 0.055 285);
-
-  /* Texto: mist-100 es el principal. mist-500 no llega a 4.5:1 sobre
-     ninguna superficie: solo para bordes y decoración, nunca texto. */
-  --color-mist-500: oklch(55.5% 0.048 285);
-  --color-mist-400: oklch(71.5% 0.036 285);
-  --color-mist-300: oklch(80% 0.028 285);
-  --color-mist-200: oklch(87.8% 0.019 285);
-  --color-mist-100: oklch(96.2% 0.009 285);
-
-  /* Acento. Pisa el naranja de Tailwind para que los orange-* de los
-     componentes lo recojan sin tocarlos. */
+  --color-voltage: #8d3a93;
+  --color-voltage-press: #772e7d;
   --color-accent-300: #ecb166;
   --color-accent-400: #e28e3a;
   --color-accent-500: #d87022;
   --color-accent-600: #b7521f;
-  --color-orange-300: var(--color-accent-300);
-  --color-orange-400: var(--color-accent-400);
-  --color-orange-500: var(--color-accent-500);
-  --color-orange-600: var(--color-accent-600);
+  --color-ember: #d87022;
+  --color-peach: #f8ead6;
+  --color-signal: #e83b47;
+  --color-ink: #131517;
+  --color-on-ink: #ffffff;
+  --color-porcelain: #f4f5f6;
+  --color-surface: #ffffff;
+  --color-graphite: #333537;
+  --color-on-graphite: #ffffff;
+  --color-stone: #66696b;
+  --color-mist: #b3b5b7;
+  --color-cell-hidden: #ecb166;
+  --color-cell-line: #c17a32;
+  --color-cell-dug: #8f4a22;
+  --color-cell-dug-edge: #6e3416;
+  --color-badge: #b7521f;
 
-  /* Texto sobre el acento: 5.91:1 sobre accent-500 y 7.71:1 sobre
-     accent-400, pero 4.00:1 sobre accent-600, así que el hover de un
-     botón de acento aclara en vez de oscurecer. */
-  --color-on-accent: oklch(14.5% 0.022 285);
+  --radius-button: 19px;
+  --radius-card: 40px;
+  --radius-badge: 4px;
+  --radius-small: 8px;
 
-  /* Roles que cambian de valor en el modo claro. */
-  --color-accent-fg: var(--color-accent-400);
-  --color-focus: var(--color-accent-400);
-  --color-danger-fg: var(--color-red-400);
+  --text-display: 56px;
+  --text-display--line-height: 1;
+  --text-display--letter-spacing: -0.018em;
+  --text-display--font-weight: 700;
 
-  /* Mezclas opacas en vez de utilidades con opacidad, para que el color
-     no dependa de lo que haya debajo. */
-  --color-surface-sunken: color-mix(in oklab, var(--color-ink-950) 60%, var(--color-ink-900));
-  --color-accent-soft: color-mix(in oklab, var(--color-accent-500) 15%, var(--color-ink-900));
-  --color-accent-line: color-mix(in oklab, var(--color-accent-500) 40%, var(--color-ink-950));
-  --color-accent-selection: color-mix(in oklab, var(--color-accent-500) 30%, var(--color-ink-900));
+  --text-heading: 40px;
+  --text-heading--line-height: 1.1;
+  --text-heading--letter-spacing: -0.018em;
+  --text-heading--font-weight: 700;
+
+  --text-heading-sm: 24px;
+  --text-heading-sm--line-height: 1.2;
+  --text-heading-sm--letter-spacing: -0.018em;
+  --text-heading-sm--font-weight: 700;
 }
 
 @layer base {
@@ -56,30 +53,32 @@
     font-family: var(--font-sans);
     line-height: 1.5;
     font-weight: 400;
-    color-scheme: dark;
-    color: var(--color-mist-100);
-    background-color: var(--color-ink-950);
+    letter-spacing: -0.018em;
+    font-feature-settings: "ss01" on, "ss02" on, "cv11" on;
+    color-scheme: light;
+    color: var(--color-ink);
+    background-color: var(--color-porcelain);
+    --shadow-board: 0 12px 32px rgba(0, 0, 0, 0.06);
   }
 
-  /* Modo claro: los nombres se quedan y los roles se invierten. ink sigue
-     siendo la superficie y mist el texto, así que ink-950 pasa a ser el
-     fondo claro y mist-100 el texto oscuro. El acento no cambia. */
-  :root[data-theme="light"] {
-    color-scheme: light;
-    --color-ink-950: oklch(98.5% 0.004 285);
-    --color-ink-900: oklch(96.8% 0.008 285);
-    --color-ink-800: oklch(94.2% 0.013 285);
-    --color-ink-700: oklch(91.5% 0.017 285);
-    --color-ink-600: oklch(89% 0.02 285);
-    --color-ink-500: oklch(83% 0.026 285);
-    --color-mist-500: oklch(62% 0.04 285);
-    --color-mist-400: oklch(50% 0.045 285);
-    --color-mist-300: oklch(43% 0.045 285);
-    --color-mist-200: oklch(36% 0.04 285);
-    --color-mist-100: oklch(23% 0.035 285);
-    --color-accent-fg: oklch(50% 0.13 50);
-    --color-focus: var(--color-accent-600);
-    --color-danger-fg: var(--color-red-700);
+  :root[data-theme='night'] {
+    color-scheme: dark;
+    --color-porcelain: #141618;
+    --color-surface: #222528;
+    --color-ink: #f4f5f6;
+    --color-on-ink: #141618;
+    --color-stone: #a8abac;
+    --color-mist: #464a4e;
+    --color-graphite: #e6e7e8;
+    --color-on-graphite: #141618;
+    --color-peach: #3a2a1e;
+    --color-ember: #e28e3a;
+    --color-cell-hidden: #d4923f;
+    --color-cell-line: #8a4e22;
+    --color-cell-dug: #3a281e;
+    --color-cell-dug-edge: #241810;
+    --color-badge: #ecb166;
+    --shadow-board: 0 12px 32px rgba(0, 0, 0, 0.4);
   }
 
   /* Movimiento: siempre corto y discreto. El bloque de
@@ -97,18 +96,15 @@
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
-    background:
-      radial-gradient(1000px 400px at 20% -5%, rgba(66, 184, 131, 0.12), transparent),
-      radial-gradient(900px 380px at 85% 0%, rgba(100, 108, 255, 0.12), transparent),
-      var(--color-ink-950);
+    background-color: var(--color-porcelain);
   }
 
-  /* En claro esos mismos velos se leen como manchas. Más cortos y más suaves. */
-  :root[data-theme="light"] body {
-    background:
-      radial-gradient(900px 360px at 18% -8%, rgba(216, 112, 34, 0.1), transparent),
-      radial-gradient(800px 340px at 88% -4%, rgba(100, 108, 255, 0.08), transparent),
-      var(--color-ink-950);
+  button,
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+    letter-spacing: inherit;
   }
 
   #app {
@@ -123,7 +119,7 @@
 
   /* Foco visible para navegación por teclado */
   :focus-visible {
-    outline: 2px solid var(--color-focus);
+    outline: 2px solid var(--color-ink);
     outline-offset: 2px;
   }
 }
@@ -132,6 +128,162 @@
    Solo transform + opacity: animar left/top o height provoca layout
    en cada frame y se nota en gama baja. */
 @layer components {
+  .skip-link {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 120;
+    transform: translateY(-180%);
+    border: 1px solid var(--color-mist);
+    border-radius: var(--radius-small);
+    background: var(--color-surface);
+    padding: 0.75rem 1rem;
+    color: var(--color-ink);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+
+  .btn-fill,
+  .btn-ghost,
+  .btn-ink {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 10px 14px;
+    border-radius: var(--radius-button);
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: -0.018em;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .btn-fill {
+    border: none;
+    background: var(--color-voltage);
+    color: #fff;
+  }
+
+  .btn-fill:hover {
+    background: var(--color-voltage-press);
+  }
+
+  .btn-ghost {
+    border: 1.5px solid var(--color-ink);
+    background: var(--color-surface);
+    color: var(--color-ink);
+  }
+
+  .btn-ghost:hover {
+    background: var(--color-porcelain);
+  }
+
+  .btn-ink {
+    border: none;
+    background: var(--color-graphite);
+    color: var(--color-on-graphite);
+  }
+
+  .btn-ink:hover {
+    background: var(--color-ink);
+  }
+
+  .btn-fill:disabled,
+  .btn-ghost:disabled,
+  .btn-ink:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  .btn-compact {
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 14px;
+    border: 1.5px solid var(--color-ink);
+    border-radius: var(--radius-button);
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .chip:hover {
+    background: var(--color-porcelain);
+  }
+
+  .chip[aria-pressed='true'] {
+    background: var(--color-ink);
+    color: var(--color-on-ink);
+  }
+
+  .chip[aria-pressed='true']:hover {
+    background: var(--color-ink);
+  }
+
+  .surface-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-card);
+    padding: 24px;
+  }
+
+  .caption {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+    letter-spacing: 0.083em;
+    text-transform: uppercase;
+    color: var(--color-stone);
+  }
+
+  .badge-peach {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-badge);
+    background: var(--color-peach);
+    color: var(--color-badge);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.5;
+    letter-spacing: 0.083em;
+    text-transform: uppercase;
+  }
+
+  .logo-mark {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: radial-gradient(86% 86% at 6% 9%, #8800ff 0%, #a732d6 51%, #ef79ff 100%);
+    color: #fff;
+  }
+
+  .wordmark {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.018em;
+    text-transform: lowercase;
+    color: var(--color-ink);
+  }
+
   .page-forward-enter-active,
   .page-forward-leave-active,
   .page-back-enter-active,
@@ -283,13 +435,6 @@
     opacity: 1;
     transform: scale(1);
   }
-}
-
-/* Lo pone y lo quita applyTheme (src/theme.js) al cambiar de tema. */
-:root[data-theme-switching] *,
-:root[data-theme-switching] *::before,
-:root[data-theme-switching] *::after {
-  transition: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

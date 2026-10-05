@@ -2,29 +2,37 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function () {
+        var stored = null
+        try {
+          stored = localStorage.getItem('bender-theme')
+        } catch (e) {}
+        var theme =
+          stored === 'night' || stored === 'day'
+            ? stored
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'night'
+              : 'day'
+        document.documentElement.dataset.theme = theme
+        document.documentElement.style.colorScheme = theme === 'night' ? 'dark' : 'light'
+      })()
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#090913" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <meta name="theme-color" content="#f4f5f6" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Bender" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Bender Juegos — Menú de inicio</title>
-    <script>
-      // Tema antes del primer pintado, para que no parpadee. Repite la
-      // lógica de src/theme.js, que toma el relevo al arrancar la app.
-      try {
-        var theme = localStorage.getItem('bender-theme')
-        if (theme !== 'light' && theme !== 'dark') {
-          theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
-        }
-        document.documentElement.dataset.theme = theme
-        if (theme === 'light') {
-          document.querySelector('meta[name="theme-color"]').content = '#fafafd'
-        }
-      } catch (e) {}
-    </script>
   </head>
   <body>
     <div id="app"></div>

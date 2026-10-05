@@ -1,63 +1,62 @@
 <script setup>
 import { TOOL_PALA, TOOL_BANDERA } from '../../games/buscaminas/constants.js'
+import { formatDuration } from '../../composables/useElapsedTime.js'
 
 defineProps({
   tool: { type: String, default: TOOL_PALA },
   flagsLeft: { type: Number, default: 0 },
   moves: { type: Number, default: 0 },
+  seconds: { type: Number, default: 0 },
+  canHint: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['restart', 'set-tool'])
+const emit = defineEmits(['restart', 'set-tool', 'hint'])
 </script>
 
 <template>
   <div class="mx-auto mb-5 grid w-full max-w-[560px] grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-2">
-    <button
-      type="button"
-      class="min-h-[44px] w-full min-w-0 rounded-md border border-ink-500 bg-ink-800 px-1.5 py-2 text-xs font-bold whitespace-nowrap text-mist-200 transition hover:border-mist-500 hover:text-mist-100 sm:px-4 sm:text-sm"
-      @click="emit('restart')"
-    >
-      ↺ Reiniciar
+    <button type="button" class="btn-ghost btn-compact w-full" @click="emit('restart')">
+      Reiniciar
     </button>
 
-    <div
-      class="grid min-w-0 grid-cols-2 overflow-hidden rounded-md border border-ink-500"
-      role="radiogroup"
-      aria-label="Herramienta"
-    >
+    <div class="grid min-w-0 grid-cols-2 overflow-hidden rounded-button border-[1.5px] border-ink">
       <button
         type="button"
-        role="radio"
-        :aria-checked="tool === TOOL_PALA"
+        :aria-pressed="tool === TOOL_PALA"
+        aria-label="Usar pala para abrir casillas"
         :class="[
-          'min-h-[44px] min-w-0 px-1 py-2 text-xs font-bold whitespace-nowrap transition sm:px-4 sm:text-sm',
-          tool === TOOL_PALA
-            ? 'bg-orange-500 text-on-accent'
-            : 'bg-ink-800 text-mist-300 hover:text-mist-100',
+          'min-h-[44px] min-w-0 px-2 text-[13px] font-medium transition',
+          tool === TOOL_PALA ? 'bg-ink text-on-ink' : 'bg-surface text-ink hover:bg-porcelain',
         ]"
         @click="emit('set-tool', TOOL_PALA)"
       >
-        ⛏ Pala
+        Pala
       </button>
       <button
         type="button"
-        role="radio"
-        :aria-checked="tool === TOOL_BANDERA"
+        :aria-pressed="tool === TOOL_BANDERA"
+        aria-label="Usar bandera para marcar minas"
         :class="[
-          'min-h-[44px] min-w-0 border-l border-ink-500 px-1 py-2 text-xs font-bold whitespace-nowrap transition sm:px-4 sm:text-sm',
-          tool === TOOL_BANDERA
-            ? 'bg-orange-500 text-on-accent'
-            : 'bg-ink-800 text-mist-300 hover:text-mist-100',
+          'min-h-[44px] min-w-0 border-l-[1.5px] border-ink px-2 text-[13px] font-medium transition',
+          tool === TOOL_BANDERA ? 'bg-ink text-on-ink' : 'bg-surface text-ink hover:bg-porcelain',
         ]"
         @click="emit('set-tool', TOOL_BANDERA)"
       >
-        🚩 Bandera
+        Bandera
       </button>
     </div>
 
-    <span class="col-span-2 text-center text-xs text-mist-400">
-      🚩 {{ flagsLeft }} restante{{ flagsLeft === 1 ? '' : 's' }}
-      <span v-if="moves > 0" class="anim-fade-up"> · {{ moves }} movimiento{{ moves === 1 ? '' : 's' }}</span>
+    <button
+      type="button"
+      class="btn-ghost btn-compact col-span-2 w-full"
+      :disabled="!canHint"
+      @click="emit('hint')"
+    >
+      Usar pista (+30 s)
+    </button>
+    <span class="caption col-span-2 text-center tabular-nums">
+      {{ flagsLeft }} bandera{{ flagsLeft === 1 ? '' : 's' }} ·
+      {{ moves }} movimiento{{ moves === 1 ? '' : 's' }} · {{ formatDuration(seconds) }}
     </span>
   </div>
 </template>

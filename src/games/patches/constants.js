@@ -31,18 +31,18 @@ export const PATCH_COUNT = {
   dificil: [6, 8],
 }
 
-// Ámbar y lima usan on-accent: sigue oscuro en claro. ink-950 no, porque ahí es el fondo.
+// Colores fijos: no siguen el tema, para que el borde del parche no se vuelva lodo.
 export const PATCH_PALETTE = [
-  { bg: 'bg-orange-500/70', text: 'text-white' },
-  { bg: 'bg-sky-600/70', text: 'text-white' },
-  { bg: 'bg-emerald-600/70', text: 'text-white' },
-  { bg: 'bg-violet-600/70', text: 'text-white' },
-  { bg: 'bg-rose-600/70', text: 'text-white' },
-  { bg: 'bg-amber-500/70', text: 'text-on-accent' },
-  { bg: 'bg-teal-600/70', text: 'text-white' },
-  { bg: 'bg-indigo-500/70', text: 'text-white' },
-  { bg: 'bg-lime-600/70', text: 'text-on-accent' },
-  { bg: 'bg-fuchsia-600/70', text: 'text-white' },
+  { bg: 'bg-orange-500', text: 'text-white', edge: 'border-orange-700' },
+  { bg: 'bg-sky-600', text: 'text-white', edge: 'border-sky-800' },
+  { bg: 'bg-emerald-600', text: 'text-white', edge: 'border-emerald-800' },
+  { bg: 'bg-violet-600', text: 'text-white', edge: 'border-violet-800' },
+  { bg: 'bg-rose-600', text: 'text-white', edge: 'border-rose-800' },
+  { bg: 'bg-amber-500', text: 'text-[#131517]', edge: 'border-amber-700' },
+  { bg: 'bg-teal-600', text: 'text-white', edge: 'border-teal-800' },
+  { bg: 'bg-indigo-500', text: 'text-white', edge: 'border-indigo-800' },
+  { bg: 'bg-lime-600', text: 'text-white', edge: 'border-lime-800' },
+  { bg: 'bg-fuchsia-600', text: 'text-white', edge: 'border-fuchsia-800' },
 ]
 
 export function difficultyLabel(difficultyId) {

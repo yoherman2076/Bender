@@ -2,10 +2,9 @@
 // Uso el google-chrome-stable del sistema en vez del MCP, que apunta al
 // canal 'chrome' (/opt/google/chrome/chrome) y no está instalado; el
 // chromium empaquetado de playwright viene sin libnspr4.
-import { chromium } from 'playwright-core'
+import { launchBrowser } from './browser.mjs'
 
-const EXEC = `${process.env.HOME}/.local/bin/google-chrome-stable`
-const BASE = 'http://localhost:5173'
+const BASE = process.env.BASE ?? 'http://localhost:5173'
 const fails = []
 const ok = (name, cond, detail = '') => {
   if (cond) console.log(`  ok   ${name}`)
@@ -15,10 +14,14 @@ const ok = (name, cond, detail = '') => {
   }
 }
 
-const browser = await chromium.launch({ executablePath: EXEC })
+const browser = await launchBrowser()
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
 const errors = []
-page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+page.on('console', (m) => {
+  // El documento SVG usado para preparar partidas solicita el favicon por defecto.
+  if (m.location().url.endsWith('/favicon.ico')) return
+  if (m.type() === 'error') errors.push(m.text())
+})
 page.on('pageerror', (e) => errors.push(String(e)))
 
 // Muestrea el contenedor principal durante una acción y devuelve los
@@ -31,11 +34,16 @@ const sampleDuring = async (action, selector = 'main') => {
     const collect = () => {
       const el = document.querySelector(sel)
       if (el) {
-        const cs = getComputedStyle(el)
+        let opacity = 1
+        let transform = 'none'
+        for (let node = el; node; node = node.parentElement) {
+          const cs = getComputedStyle(node)
+          opacity *= Number(cs.opacity)
+          if (transform === 'none' && cs.transform !== 'none') transform = cs.transform
+        }
         window.__samples.push({
-          opacity: Number(cs.opacity),
-          transform: cs.transform,
-          translate: cs.translate,
+          opacity,
+          transform,
           cls: el.className,
         })
       }
@@ -70,7 +78,6 @@ const enterGame = async (path) => {
     await jugar.click()
     await page.waitForTimeout(650)
   }
-  // Patches usa div[role=gridcell] y los otros botones.
   if ((await page.locator('[role="gridcell"]').count()) === 0)
     throw new Error(`no hay tablero en ${path}`)
 }
@@ -84,16 +91,14 @@ const stagger = await page.evaluate(() => {
 ok('4 tarjetas animadas', stagger.length === 4, JSON.stringify(stagger))
 ok('retrasos escalonados', new Set(stagger).size === 4, JSON.stringify(stagger))
 await page.waitForTimeout(700)
-// Si el fill-mode fuera "both", el transform final quedaría puesto para
-// siempre y taparía el hover. Ojo: Tailwind v4 escribe la propiedad
-// `translate`, no `transform`, así que hay que mirar la buena.
+const idleOutline = await page.locator('a.anim-fade-up').first().evaluate((card) => getComputedStyle(card).outlineColor)
 await page.hover('a.anim-fade-up')
 await page.waitForTimeout(300)
 const hover = await page.evaluate(() => {
   const cs = getComputedStyle(document.querySelector('a.anim-fade-up'))
-  return { translate: cs.translate, scale: cs.scale, transform: cs.transform }
+  return { color: cs.outlineColor, width: parseFloat(cs.outlineWidth), style: cs.outlineStyle }
 })
-ok('el hover elevate sigue activo tras la entrada', hover.translate !== 'none', JSON.stringify(hover))
+ok('el hover muestra el contorno tras la entrada', hover.color !== idleOutline && hover.color !== 'rgba(0, 0, 0, 0)' && hover.width > 0 && hover.style !== 'none', JSON.stringify(hover))
 
 console.log('\n2. Ruta home → juego (entra desde abajo)')
 const down = await sampleDuring(() => page.click('a[href="/juegos/tango"]'))
@@ -144,7 +149,7 @@ ok('el tablero está montado', (await page.locator('button[role="gridcell"]').co
 ok('el setup se fue', (await page.locator('text=Configura tu partida').count()) === 0)
 
 console.log('\nmicro: desplazamiento y fusión en 2048')
-await page.goto(`${BASE}/juegos/2048`, { waitUntil: 'networkidle' })
+await page.goto(`${BASE}/favicon.svg`, { waitUntil: 'networkidle' })
 await page.evaluate(() => {
   localStorage.setItem(
     'bender.2048.save.v1',
@@ -165,8 +170,9 @@ await page.evaluate(() => {
     }),
   )
 })
-await page.reload({ waitUntil: 'networkidle' })
+await page.goto(`${BASE}/juegos/2048`, { waitUntil: 'networkidle' })
 await page.waitForTimeout(200)
+await page.getByRole('grid', { name: 'Tablero 2048' }).focus()
 const tileId2048 = await page.locator('.game-2048-tile[data-r="0"][data-c="3"]').getAttribute('data-tile-id')
 await page.keyboard.press('ArrowLeft')
 const tileTransforms = await page.evaluate(async (id) => {
@@ -229,7 +235,7 @@ await enterGame('/juegos/tango')
 // casualidad y fallaba en cuanto la partida venía restaurada.
 const popSeen = await page.evaluate(async () => {
   const cells = [...document.querySelectorAll('button[role="gridcell"]')]
-  const btn = cells.find((c) => !c.disabled)
+  const btn = cells.find((c) => c.getAttribute('aria-disabled') !== 'true')
   btn.click()
   await new Promise((r) => setTimeout(r, 30))
   const sym = btn.querySelector('.cell-symbol')
@@ -241,7 +247,7 @@ ok('el símbolo anima al aparecer', popSeen.length > 0, JSON.stringify(popSeen))
 // interacción más frecuente y era la que no se cubría.
 const cycle = await page.evaluate(async () => {
   const cells = [...document.querySelectorAll('button[role="gridcell"]')]
-  const btn = cells.find((c) => !c.disabled)
+  const btn = cells.find((c) => c.getAttribute('aria-disabled') !== 'true')
   const out = []
   for (let i = 0; i < 4; i++) {
     btn.click()
@@ -285,7 +291,7 @@ const boom = await page.evaluate(async () => {
     const alert = document.querySelector('.board-alert')
     if (alert) break
     const cells = [...document.querySelectorAll('button[role="gridcell"]')]
-    const hidden = cells.filter((c) => c.getAttribute('aria-disabled') === 'false')
+    const hidden = cells.filter((c) => c.getAttribute('aria-label')?.endsWith(': sin explorar'))
     if (!hidden.length) break
     hidden[Math.floor(Math.random() * hidden.length)].click()
     await new Promise((r) => setTimeout(r, 60))
@@ -299,12 +305,12 @@ ok('el aviso de explosión aparece', boom.alert, JSON.stringify(boom))
 // así que comparo por prefijo.
 ok('la celda explosionada tiembla', boom.anims.some((a) => a?.startsWith('cell-boom')), JSON.stringify(boom.anims))
 
-console.log('\n8. micro: parche de Patches y chip de movimientos')
+console.log('\n8. micro: parche de Patches y contador de movimientos')
 await enterGame('/juegos/patches')
 const patchAnims = await page.evaluate(async () => {
   const seen = new Set()
   const poll = setInterval(() => {
-    for (const el of document.querySelectorAll('.patch-overlay'))
+    for (const el of document.querySelectorAll('.patch-rect.anim-pop-sm'))
       for (const a of el.getAnimations()) seen.add(a.animationName)
   }, 16)
   const cells = [...document.querySelectorAll('[data-cell]')]
@@ -316,15 +322,15 @@ const patchAnims = await page.evaluate(async () => {
   cells[5].dispatchEvent(new PointerEvent('pointerup', { ...opts, clientX: b.x + 5, clientY: b.y + 5 }))
   await new Promise((r) => setTimeout(r, 500))
   clearInterval(poll)
-  return { anims: [...seen], patches: document.querySelectorAll('.patch-overlay').length }
+  return { anims: [...seen], patches: document.querySelectorAll('.patch-rect.anim-pop-sm').length }
 })
 ok('se creó un parche', patchAnims.patches > 0, JSON.stringify(patchAnims))
 ok('el parche tiene animación de entrada', patchAnims.anims.includes('bender-pop-sm'), JSON.stringify(patchAnims.anims))
-const movesChip = await page.evaluate(() => {
+const moveCount = await page.evaluate(() => {
   const el = [...document.querySelectorAll('span')].find((s) => s.textContent.includes('movimiento'))
-  return el ? { anim: getComputedStyle(el).animationName, delay: getComputedStyle(el).animationDelay } : null
+  return el ? el.textContent.trim() : null
 })
-ok('el chip de movimientos aparece con animación', movesChip?.anim === 'bender-fade-up', JSON.stringify(movesChip))
+ok('el contador registra el parche creado', /^1 movimiento/.test(moveCount ?? ''), moveCount)
 
 console.log('\n9. prefers-reduced-motion anula todo')
 await page.emulateMedia({ reducedMotion: 'reduce' })

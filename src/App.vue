@@ -1,23 +1,21 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import { App as CapacitorApp } from '@capacitor/app'
 import Navbar from './components/Navbar.vue'
+import { hasSavedGameForRoute } from './games/gameStorage.js'
 
 const PROTECTED_ROUTES = new Set(['tango', 'buscaminas', 'patches', 'juego-2048'])
-const SAVE_KEYS = {
-  tango: 'bender.tango.save.v1',
-  buscaminas: 'bender.buscaminas.save.v1',
-  patches: 'bender.patches.save.v1',
-  'juego-2048': 'bender.2048.save.v1',
-}
 
 const route = useRoute()
 const router = useRouter()
 const exitDialogOpen = ref(false)
 const pendingExitTarget = ref(null)
 const continueButton = ref(null)
+const mobileNavigationOpen = ref(false)
+const cancelGameConfirmation = shallowRef(null)
+provide('cancel-game-confirmation', cancelGameConfirmation)
 const isProtectedRoute = computed(() => PROTECTED_ROUTES.has(route.name))
 
 // Dirección de la transición de vista: home es el nivel 0 y los juegos
@@ -45,13 +43,22 @@ function setAppInert(inert) {
 }
 
 function hasSavedGame(routeName) {
-  const key = SAVE_KEYS[routeName]
-  if (!key) return false
-  try {
-    return Boolean(localStorage.getItem(key))
-  } catch {
-    return false
-  }
+  return hasSavedGameForRoute(routeName)
+}
+
+watch(
+  () => route.meta.title,
+  (title) => {
+    document.title = title ? `${title} | Bender Juegos` : 'Bender Juegos'
+  },
+  { immediate: true },
+)
+
+function focusPageHeading() {
+  const target =
+    document.querySelector('#main-content h1[tabindex="-1"]') ??
+    document.querySelector('#main-content')
+  target?.focus({ preventScroll: true })
 }
 
 function setDialogPageState(open) {
@@ -94,7 +101,31 @@ async function confirmExit() {
   }
 }
 
+function onExitDialogKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeExitDialog()
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const buttons = event.currentTarget.querySelectorAll('button:not([disabled])')
+  const first = buttons[0]
+  const last = buttons[buttons.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last?.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first?.focus()
+  }
+}
+
 const removeNavigationGuard = router.beforeEach((to, from) => {
+  if (cancelGameConfirmation.value) {
+    cancelGameConfirmation.value()
+    return false
+  }
   const fromDepth = depthOf(from.name)
   const toDepth = depthOf(to.name)
   pageTransition.value =
@@ -123,6 +154,10 @@ const removeNavigationGuard = router.beforeEach((to, from) => {
 })
 
 async function handleNativeBack() {
+  if (cancelGameConfirmation.value) {
+    cancelGameConfirmation.value()
+    return
+  }
   if (exitDialogOpen.value) {
     await closeExitDialog()
     return
@@ -160,12 +195,15 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex min-h-screen">
-    <Navbar />
+    <a class="skip-link" href="#main-content">Saltar al contenido</a>
+    <Navbar @mobile-open-change="mobileNavigationOpen = $event" />
 
-    <div class="flex min-w-0 flex-1 flex-col pt-14 md:pt-0">
+    <div class="flex min-w-0 flex-1 flex-col pt-14 md:pt-0" :inert="mobileNavigationOpen">
       <RouterView v-slot="{ Component }">
-        <Transition :name="pageTransition" mode="out-in">
-          <component :is="Component" :key="route.name" />
+        <Transition :name="pageTransition" mode="out-in" @after-enter="focusPageHeading">
+          <div :key="route.name" class="min-w-0 flex-1">
+            <component :is="Component" />
+          </div>
         </Transition>
       </RouterView>
     </div>
@@ -175,33 +213,49 @@ onBeforeUnmount(() => {
     <Transition name="dialog">
       <div
         v-if="exitDialogOpen"
-        class="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-ink/40 px-4 py-6"
         @click.self="closeExitDialog"
-        @keydown.esc.stop.prevent="closeExitDialog"
+        @keydown="onExitDialogKeydown"
       >
         <section
-          class="game-dialog-panel w-full max-w-md rounded-2xl border border-ink-600 bg-ink-900 p-6 text-center shadow-2xl"
+          class="game-dialog-panel surface-card w-full max-w-md text-center"
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="exit-dialog-title"
           aria-describedby="exit-dialog-description"
         >
           <div
-            class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-2xl"
+            class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-peach text-badge"
             aria-hidden="true"
           >
-            ↩
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <path
+                d="M9 8H5.5V4.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M5.8 8.2A7.2 7.2 0 1 1 6.6 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+              />
+            </svg>
           </div>
-          <h2 id="exit-dialog-title" class="m-0 text-2xl font-extrabold text-mist-100">
+          <h2 id="exit-dialog-title" class="m-0 text-heading-sm text-ink">
             ¿Quieres salir del juego?
           </h2>
-          <p id="exit-dialog-description" class="mt-3 mb-6 text-mist-300">
+          <p id="exit-dialog-description" class="mt-3 mb-6 text-stone">
             Si tienes una partida en curso, se guarda automáticamente para continuar cuando vuelvas.
           </p>
-          <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-center">
             <button
               type="button"
-              class="min-h-12 rounded-lg border border-ink-600 px-5 py-3 font-bold text-mist-200 transition hover:bg-ink-800 hover:text-mist-100"
+              class="btn-ghost"
               @click="confirmExit"
             >
               Salir
@@ -209,7 +263,7 @@ onBeforeUnmount(() => {
             <button
               ref="continueButton"
               type="button"
-              class="min-h-12 rounded-lg bg-orange-500 px-5 py-3 font-extrabold text-on-accent transition hover:bg-orange-400"
+              class="btn-fill"
               @click="closeExitDialog"
             >
               Seguir jugando

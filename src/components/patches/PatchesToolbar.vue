@@ -1,50 +1,42 @@
 <script setup>
 import { difficultyLabel } from '../../games/patches/constants.js'
+import { formatDuration } from '../../composables/useElapsedTime.js'
 
 defineProps({
   difficulty: { type: String, required: true },
   canUndo: { type: Boolean, default: false },
   moves: { type: Number, default: 0 },
+  seconds: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['undo', 'restart', 'new-game'])
+const emit = defineEmits(['undo', 'restart', 'new-game', 'hint'])
 </script>
 
 <template>
   <div class="mx-auto mb-5 grid w-full max-w-[440px] grid-cols-3 gap-2">
-    <span
-      class="col-span-3 justify-self-center rounded-full border border-accent-line bg-accent-soft px-4 py-1 text-[0.85rem] font-bold text-accent-fg"
-    >
+    <span class="badge-peach col-span-3 justify-self-center">
       {{ difficultyLabel(difficulty) }} · aleatoria
     </span>
     <button
       type="button"
+      class="btn-ghost btn-compact w-full"
       :disabled="!canUndo"
-      class="min-h-[44px] w-full min-w-0 rounded-md border border-ink-500 bg-ink-800 px-1.5 py-2 text-xs font-bold whitespace-nowrap text-mist-200 transition hover:border-mist-500 hover:text-mist-100 disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:text-sm"
       @click="emit('undo')"
     >
-      ↩ Deshacer
+      Deshacer
     </button>
-    <button
-      type="button"
-      class="min-h-[44px] w-full min-w-0 rounded-md border border-ink-500 bg-ink-800 px-1.5 py-2 text-xs font-bold whitespace-nowrap text-mist-200 transition hover:border-mist-500 hover:text-mist-100 sm:px-4 sm:text-sm"
-      @click="emit('restart')"
-    >
-      ↺ Reiniciar
+    <button type="button" class="btn-ghost btn-compact w-full" @click="emit('restart')">
+      Reiniciar
     </button>
-    <button
-      type="button"
-      class="min-h-[44px] w-full min-w-0 rounded-md border border-orange-400 bg-orange-500 px-1.5 py-2 text-xs font-bold whitespace-nowrap text-on-accent transition hover:bg-orange-400 sm:px-4 sm:text-sm"
-      @click="emit('new-game')"
-    >
-      <span class="sm:hidden">+ Nueva</span>
-      <span class="hidden sm:inline">+ Otra partida</span>
+    <button type="button" class="btn-ink btn-compact w-full" @click="emit('new-game')">
+      <span class="sm:hidden">Nueva</span>
+      <span class="hidden sm:inline">Otra partida</span>
     </button>
-    <span
-      v-if="moves > 0"
-      class="anim-fade-up col-span-3 text-center text-xs text-mist-400"
-    >
-      {{ moves }} movimiento{{ moves === 1 ? '' : 's' }}
+    <button type="button" class="btn-ghost btn-compact col-span-3 w-full" @click="emit('hint')">
+      Usar pista (+30 s)
+    </button>
+    <span class="caption col-span-3 text-center tabular-nums">
+      {{ moves }} movimiento{{ moves === 1 ? '' : 's' }} · {{ formatDuration(seconds) }}
     </span>
   </div>
 </template>

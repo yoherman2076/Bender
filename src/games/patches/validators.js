@@ -31,6 +31,13 @@ export function cluesInRect(rect, clues) {
   )
 }
 
+/** Número que pide la única pista del rectángulo. Null si no hay una sola, o si no trae número. */
+export function expectedMeasure(rect, clues) {
+  const inside = cluesInRect(rect, clues)
+  if (inside.length !== 1) return null
+  return inside[0].number
+}
+
 export function rectsOverlap(a, b) {
   return a.r1 <= b.r2 && b.r1 <= a.r2 && a.c1 <= b.c2 && b.c1 <= a.c2
 }

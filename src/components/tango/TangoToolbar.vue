@@ -1,42 +1,41 @@
 <script setup>
+import { formatDuration } from '../../composables/useElapsedTime.js'
+
 defineProps({
   canUndo: { type: Boolean, default: false },
   moves: { type: Number, default: 0 },
+  seconds: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['restart', 'undo', 'new-game'])
+const emit = defineEmits(['restart', 'undo', 'new-game', 'hint'])
 </script>
 
 <template>
   <div class="mx-auto mb-5 grid w-full max-w-[560px] grid-cols-3 gap-2">
-    <button
-      type="button"
-      class="min-h-[44px] w-full min-w-0 rounded-md border border-ink-500 bg-ink-800 px-1.5 py-2 text-xs font-bold whitespace-nowrap text-mist-200 transition hover:border-mist-500 hover:text-mist-100 sm:px-4 sm:text-sm"
-      @click="emit('restart')"
-    >
-      ↺ Reiniciar
+    <button type="button" class="btn-ghost btn-compact w-full" @click="emit('restart')">
+      Reiniciar
     </button>
     <button
       type="button"
+      class="btn-ghost btn-compact w-full"
       :disabled="!canUndo"
-      class="min-h-[44px] w-full min-w-0 rounded-md border border-ink-500 bg-ink-800 px-1.5 py-2 text-xs font-bold whitespace-nowrap text-mist-200 transition hover:border-mist-500 hover:text-mist-100 disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:text-sm"
       @click="emit('undo')"
     >
-      ↩ Deshacer
+      Deshacer
     </button>
-    <button
-      type="button"
-      class="min-h-[44px] w-full min-w-0 rounded-md border border-orange-400 bg-orange-500 px-1.5 py-2 text-xs font-bold whitespace-nowrap text-on-accent transition hover:bg-orange-400 sm:px-4 sm:text-sm"
-      @click="emit('new-game')"
-    >
-      <span class="sm:hidden">+ Nueva</span>
-      <span class="hidden sm:inline">+ Otra partida</span>
+    <button type="button" class="btn-ink btn-compact w-full" @click="emit('new-game')">
+      <span class="sm:hidden">Nueva</span>
+      <span class="hidden sm:inline">Otra partida</span>
+    </button>
+    <button type="button" class="btn-ghost btn-compact col-span-3 w-full" @click="emit('hint')">
+      Usar pista (+30 s)
     </button>
     <span
-      v-if="moves > 0"
-      class="anim-fade-up col-span-3 text-center text-xs text-mist-400"
+      class="caption col-span-3 text-center tabular-nums"
+      :class="moves > 0 ? 'anim-fade-up' : 'invisible'"
+      :aria-hidden="moves === 0"
     >
-      {{ moves }} movimiento{{ moves === 1 ? '' : 's' }}
+      {{ moves }} movimiento{{ moves === 1 ? '' : 's' }} · {{ formatDuration(seconds) }}
     </span>
   </div>
 </template>

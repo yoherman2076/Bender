@@ -1,8 +1,4 @@
-/* Estilos compartidos por las 4 vistas de juego.
-   Mantienen la API de clases (.game-page, .back, ...) pero usan
-   los tokens del tema Tailwind definidos en src/style.css
-   para no duplicar hex. Los juegos nuevos deberían usar
-   utilidades Tailwind directamente en el template. */
+/* Estilos compartidos por las 4 vistas de juego. */
 .game-page {
   width: 100%;
   max-width: 900px;
@@ -25,6 +21,10 @@
   width: 100%;
   max-width: var(--board-max);
   margin-inline: auto;
+  padding: 16px;
+  border-radius: 40px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-board);
   overscroll-behavior: contain;
   container-type: inline-size;
 }
@@ -38,72 +38,120 @@
 
 @media (orientation: landscape) and (max-height: 600px) and (max-width: 1024px) {
   .game-board-frame {
-    width: 85vw;
-    width: 85dvw;
+    width: 100%;
     max-width: none;
+    padding: 10px;
   }
 }
 
 .back {
-  display: inline-block;
-  color: var(--color-accent-fg);
-  text-decoration: none;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 1.2rem;
+  color: var(--color-stone);
+  font-weight: 500;
+  text-decoration: none;
 }
 
 .back:hover {
+  color: var(--color-ink);
   text-decoration: underline;
 }
 
 .game-header {
   display: flex;
   align-items: center;
-  gap: 1.2rem;
-  padding: 1.8rem;
-  border-radius: 8px;
-  border: 2px solid #fff;
-  color: #fff;
-  margin-bottom: 1.5rem;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 24px;
+  border-radius: 40px;
+  background: var(--color-surface);
+  color: var(--color-ink);
 }
 
 .game-header h1 {
-  margin: 0 0 0.2rem;
-  font-size: 2rem;
+  margin: 0 0 4px;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.018em;
 }
 
 .game-header p {
   margin: 0;
-  opacity: 0.9;
+  color: var(--color-stone);
 }
 
 .monogram {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   min-width: 64px;
   height: 64px;
   padding: 0 0.6rem;
-  font-weight: 800;
-  font-size: 1.2rem;
-  background: rgba(0, 0, 0, 0.35);
-  border: 2px solid var(--color-orange-300, #fdba74);
-  border-radius: 6px;
-  flex-shrink: 0;
+  border-radius: 19px;
+  background: var(--color-accent-500);
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.monogram svg {
+  width: 28px;
+  height: 28px;
+}
+
+.monogram--tango {
+  background: var(--color-accent-300);
+  color: #131517;
+}
+
+.monogram--buscaminas {
+  background: var(--color-accent-400);
+  color: #131517;
+}
+
+.monogram--patches {
+  background: var(--color-accent-500);
+  color: #fff;
+}
+
+.monogram--2048 {
+  background: var(--color-accent-600);
+  color: #fff;
 }
 
 .placeholder {
-  border: 2px dashed var(--color-ink-500, #2c334d);
-  border-radius: 8px;
   padding: 3rem 2rem;
+  border: 1.5px dashed var(--color-mist);
+  border-radius: 40px;
+  background: var(--color-surface);
+  color: var(--color-stone);
   text-align: center;
-  color: var(--color-mist-400, #8b90a7);
-  background: var(--color-ink-900, #121627);
 }
 
 .placeholder-title {
+  margin: 0 0 0.5rem;
+  color: var(--color-ink);
   font-size: 1.3rem;
   font-weight: 700;
-  color: var(--color-mist-200, #c9cede);
-  margin: 0 0 0.5rem;
+}
+
+.quiet-link {
+  border: none;
+  background: transparent;
+  color: var(--color-stone);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.083em;
+  text-transform: uppercase;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.quiet-link:hover {
+  color: var(--color-ink);
+  text-decoration: underline;
 }

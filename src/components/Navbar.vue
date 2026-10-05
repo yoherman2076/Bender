@@ -2,11 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { games } from '../data/games.js'
-import ThemeSwitch from './ThemeSwitch.vue'
+import GameIcon from './GameIcon.vue'
+import ThemeToggle from './ThemeToggle.vue'
 
 const STORAGE_KEY = 'bender-sidebar-expanded'
 
 const route = useRoute()
+const emit = defineEmits(['mobile-open-change'])
 const isDesktop = ref(false)
 const isExpanded = ref(true)
 const isMobileOpen = ref(false)
@@ -54,14 +56,32 @@ async function toggleSidebar() {
   }
 }
 
-function closeFromKeyboard() {
-  closeMobileSidebar()
+function onSidebarKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeMobileSidebar()
+    return
+  }
+  if (isDesktop.value || !isMobileOpen.value || event.key !== 'Tab') return
+
+  const focusable = [...event.currentTarget.querySelectorAll(
+    'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )]
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last?.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first?.focus()
+  }
 }
 
 watch(isExpanded, (expanded) => {
-  if (typeof localStorage !== 'undefined') {
+  try {
     localStorage.setItem(STORAGE_KEY, String(expanded))
-  }
+  } catch {}
 })
 
 watch(
@@ -73,12 +93,15 @@ watch(
 
 watch(isMobileOpen, (open) => {
   document.body.style.overflow = open ? 'hidden' : ''
+  emit('mobile-open-change', open)
 })
 
 onMounted(() => {
   desktopQuery = window.matchMedia('(min-width: 768px)')
   isDesktop.value = desktopQuery.matches
-  isExpanded.value = localStorage.getItem(STORAGE_KEY) !== 'false'
+  try {
+    isExpanded.value = localStorage.getItem(STORAGE_KEY) !== 'false'
+  } catch {}
   desktopQuery.addEventListener('change', syncViewport)
 })
 
@@ -91,78 +114,87 @@ onBeforeUnmount(() => {
 <template>
   <div class="contents">
     <div
-      class="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-ink-700 bg-ink-950 px-3 md:hidden"
+      class="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-mist bg-porcelain px-3 md:hidden"
     >
       <RouterLink
         to="/"
-        class="flex min-h-11 items-center gap-2.5 text-base font-extrabold tracking-tight text-mist-100 no-underline"
+        class="flex min-h-11 items-center gap-2.5 no-underline"
+        aria-label="bender, ir al inicio"
       >
-        <span
-          class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-orange-500 text-xs font-extrabold text-on-accent"
-          aria-hidden="true"
-          >BJ</span
-        >
-        <span>Bender Juegos</span>
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16">
+            <path
+              fill="currentColor"
+              d="M12 2.5 14.2 9.8 21.5 12 14.2 14.2 12 21.5 9.8 14.2 2.5 12 9.8 9.8Z"
+            />
+          </svg>
+        </span>
+        <span class="wordmark">bender</span>
       </RouterLink>
-      <button
-        ref="mobileMenuButton"
-        type="button"
-        class="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 font-semibold text-mist-200 hover:bg-ink-800 hover:text-mist-100"
-        :aria-expanded="isMobileOpen"
-        :aria-controls="panelId"
-        @click="openMobileSidebar"
-      >
-        <svg
-          class="h-5 w-5"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          aria-hidden="true"
+      <div class="flex items-center gap-2">
+        <button
+          ref="mobileMenuButton"
+          type="button"
+          class="inline-flex min-h-11 items-center gap-2 rounded-button px-3 font-medium text-ink hover:bg-surface"
+          :aria-expanded="isMobileOpen"
+          :aria-controls="panelId"
+          @click="openMobileSidebar"
         >
-          <path d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-        <span>Menú</span>
-      </button>
+          <svg
+            class="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          <span>Menú</span>
+        </button>
+      </div>
     </div>
 
     <aside
       :id="panelId"
-      class="fixed inset-y-0 left-0 z-50 h-dvh w-72 border-r border-ink-700 bg-ink-900 transition-[width,translate,transform] duration-200 md:sticky md:top-0 md:z-20 md:h-dvh md:translate-x-0"
+      class="fixed inset-y-0 left-0 z-50 h-dvh w-72 border-r border-mist bg-surface transition-[width,translate,transform] duration-200 md:sticky md:top-0 md:z-20 md:h-dvh md:translate-x-0"
       :class="[
         isDesktop && !isExpanded ? 'md:w-20' : 'md:w-72',
         !isDesktop && !isMobileOpen ? '-translate-x-full' : 'translate-x-0',
-        !isDesktop && isMobileOpen ? 'shadow-2xl' : '',
       ]"
       :aria-hidden="!isDesktop && !isMobileOpen"
       :inert="!isDesktop && !isMobileOpen"
-      @keydown.esc="closeFromKeyboard"
+      :role="!isDesktop && isMobileOpen ? 'dialog' : undefined"
+      :aria-modal="!isDesktop && isMobileOpen ? 'true' : undefined"
+      aria-label="Menú principal"
+      @keydown="onSidebarKeydown"
     >
       <div class="flex h-full min-h-0 flex-col">
         <div
-          class="flex h-16 shrink-0 items-center border-b border-ink-700"
+          class="flex h-16 shrink-0 items-center border-b border-mist"
           :class="showLabels ? 'justify-between gap-3 px-4' : 'justify-center px-2'"
         >
           <RouterLink
             to="/"
-            class="flex min-h-11 items-center gap-2.5 rounded-lg text-mist-100 no-underline"
-            aria-label="Bender Juegos, ir al inicio"
+            class="flex min-h-11 items-center gap-2.5 no-underline"
+            aria-label="bender, ir al inicio"
           >
-            <span
-              class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-orange-500 text-xs font-extrabold text-on-accent"
-              aria-hidden="true"
-              >BJ</span
-            >
-            <span v-if="showLabels" class="truncate text-base font-extrabold tracking-tight"
-              >Bender Juegos</span
-            >
+            <span class="logo-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16">
+                <path
+                  fill="currentColor"
+                  d="M12 2.5 14.2 9.8 21.5 12 14.2 14.2 12 21.5 9.8 14.2 2.5 12 9.8 9.8Z"
+                />
+              </svg>
+            </span>
+            <span v-if="showLabels" class="wordmark truncate">bender</span>
           </RouterLink>
           <button
             v-if="showLabels"
             ref="closeButton"
             type="button"
-            class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-mist-300 hover:bg-ink-800 hover:text-mist-100"
+            class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-button text-stone hover:bg-porcelain hover:text-ink"
             :aria-label="isDesktop ? 'Contraer menú lateral' : 'Cerrar menú lateral'"
             :aria-expanded="isDesktop ? isExpanded : isMobileOpen"
             :aria-controls="panelId"
@@ -200,7 +232,7 @@ onBeforeUnmount(() => {
           v-if="!showLabels"
           ref="expandButton"
           type="button"
-          class="mx-auto mt-3 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-mist-300 hover:bg-ink-800 hover:text-mist-100"
+          class="mx-auto mt-3 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-button text-stone hover:bg-porcelain hover:text-ink"
           aria-label="Expandir menú lateral"
           :aria-expanded="isExpanded"
           :aria-controls="panelId"
@@ -227,7 +259,7 @@ onBeforeUnmount(() => {
         >
           <RouterLink
             to="/"
-            class="nav-link flex min-h-12 w-full items-center rounded-lg text-[0.95rem] font-semibold text-mist-300 no-underline transition-colors hover:bg-ink-800 hover:text-mist-100"
+            class="nav-link flex min-h-12 w-full items-center rounded-button text-[0.95rem] font-medium text-stone no-underline transition-colors hover:bg-porcelain hover:text-ink"
             :class="showLabels ? 'gap-3 px-3' : 'justify-center px-2'"
             active-class="active"
             exact
@@ -250,37 +282,36 @@ onBeforeUnmount(() => {
             <span v-if="showLabels">Inicio</span>
           </RouterLink>
 
-          <div v-if="showLabels" class="px-3 pt-6 pb-2 text-xs font-bold tracking-widest text-mist-400 uppercase">
-            Juegos
-          </div>
-          <div v-else class="mx-auto my-3 h-px w-8 bg-ink-700" />
+          <div v-if="showLabels" class="caption px-3 pt-6 pb-2">Juegos</div>
+          <div v-else class="mx-auto my-3 h-px w-8 bg-mist" />
 
           <RouterLink
             v-for="game in games"
             :key="game.id"
             :to="game.route"
-            class="nav-link flex min-h-12 w-full items-center rounded-lg text-[0.95rem] font-semibold text-mist-300 no-underline transition-colors hover:bg-ink-800 hover:text-mist-100"
+            class="nav-link flex min-h-12 w-full items-center rounded-button text-[0.95rem] font-medium text-stone no-underline transition-colors hover:bg-porcelain hover:text-ink"
             :class="showLabels ? 'gap-3 px-3' : 'justify-center px-2'"
             active-class="active"
             :title="showLabels ? undefined : game.title"
             :aria-label="game.title"
           >
             <span
-              class="inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-md border border-ink-600 bg-ink-950 px-1.5 text-[0.68rem] font-extrabold text-mist-200"
+              class="nav-game-icon inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-small border border-mist bg-porcelain text-ink"
               aria-hidden="true"
-              >{{ game.monogram }}</span
             >
+              <GameIcon :id="game.id" />
+            </span>
             <span v-if="showLabels">{{ game.title }}</span>
           </RouterLink>
         </nav>
 
         <footer
-          class="shrink-0 border-t border-ink-700"
-          :class="showLabels ? 'px-6 py-4 text-xs leading-relaxed text-mist-400' : 'flex justify-center px-2 py-3'"
+          class="shrink-0 border-t border-mist px-3 py-3 text-[13px] leading-relaxed text-stone"
+          :class="showLabels ? 'px-4' : 'px-2'"
         >
-          <ThemeSwitch :compact="!showLabels" :class="showLabels ? 'mb-3' : ''" />
+          <ThemeToggle :labelled="showLabels" />
           <template v-if="showLabels">
-            <p class="m-0 font-bold text-mist-300">Bender Juegos</p>
+            <p class="wordmark m-0 mt-3">bender</p>
             <p class="m-0 mt-1">{{ games.length }} juegos para jugar sin conexión.</p>
           </template>
         </footer>
@@ -291,7 +322,7 @@ onBeforeUnmount(() => {
       <button
         v-if="!isDesktop && isMobileOpen"
         type="button"
-        class="fixed inset-0 z-40 cursor-default bg-black/65 backdrop-blur-[2px] md:hidden"
+        class="fixed inset-0 z-40 cursor-default bg-ink/40 md:hidden"
         aria-label="Cerrar menú lateral"
         @click="closeMobileSidebar"
       />
@@ -301,12 +332,18 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .nav-link.active {
-  color: var(--color-on-accent);
-  background: var(--color-accent-500);
+  color: var(--color-on-ink);
+  background: var(--color-ink);
 }
 
 .nav-link.active:hover {
-  background: var(--color-accent-500);
+  color: var(--color-on-ink);
+  background: var(--color-ink);
+}
+
+.nav-game-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .drawer-backdrop-enter-active,
